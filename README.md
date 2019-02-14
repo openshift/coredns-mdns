@@ -13,7 +13,7 @@ accessible through a standard DNS server.
 ## Syntax
 
 ~~~
-hello
+hello example.com
 ~~~
 
 ## Examples
