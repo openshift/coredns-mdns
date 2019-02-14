@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-    "net"
+    //"net"
+    "strings"
 
 	"github.com/coredns/coredns/plugin"
     "github.com/coredns/coredns/request"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/miekg/dns"
 	"golang.org/x/net/context"
+    "github.com/hashicorp/mdns"
 )
 
 var log = clog.NewWithPlugin("hello")
@@ -29,18 +31,50 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
     msg.SetReply(r)
     state := request.Request{W: w, Req: r}
 
-    header := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
-    msg.Answer = []dns.RR{&dns.CNAME{Hdr: header, Target: "hello.world."}}
-    aheader := dns.RR_Header{Name: "hello.world.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
-    msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: net.ParseIP("1.2.3.4")})
+    if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA {
+        fmt.Println("Bailing")
+        return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
+    }
+
+    //header := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
+    //msg.Answer = []dns.RR{&dns.CNAME{Hdr: header, Target: "hello.world."}}
+    //aheader := dns.RR_Header{Name: "hello.world.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
+    //msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: net.ParseIP("1.2.3.4")})
+    //aaaaheader := dns.RR_Header{Name: "hello.world.", Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 0}
+    //msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: net.ParseIP("dead::beef")})
 
     //header := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
     //msg.Answer = []dns.RR{&dns.A{Hdr: header, A: net.ParseIP("1.2.3.4")}}
 
-    fmt.Println(msg)
-    w.WriteMsg(msg)
-    return dns.RcodeSuccess, nil
-    //return plugin.NextOrFailure(h.Name(), h.Next, ctx, pw, r)
+    // MDNS browsing
+    entriesCh := make(chan *mdns.ServiceEntry, 4)
+    mdnsHosts := make(map[string]*mdns.ServiceEntry)
+    go func() {
+        for entry := range entriesCh {
+            //fmt.Printf("New entry: %v\n", entry)
+            fmt.Printf("Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Host, entry.AddrV4, entry.AddrV6)
+            // Hacky - coerce .local to our domain
+            // I was having trouble using domains other than .local. Need further investigation.
+            hostCustomDomain := strings.Replace(entry.Host, ".local.", ".fooxample.com.", 1)
+            mdnsHosts[hostCustomDomain] = entry
+        }
+    }()
+
+    mdns.Lookup("_workstation._tcp", entriesCh)
+    close(entriesCh)
+    fmt.Println(mdnsHosts)
+
+    answerEntry, present := mdnsHosts[state.Name()]
+    if present {
+        aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
+        msg.Answer = []dns.RR{&dns.A{Hdr: aheader, A: answerEntry.AddrV4}}
+        aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 0}
+        msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+        fmt.Println(msg)
+        w.WriteMsg(msg)
+        return dns.RcodeSuccess, nil
+    }
+    return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
 }
 
 func (h Hello) Name() string { return "hello" }
