@@ -4,78 +4,78 @@ import (
 	"fmt"
 	"io"
 	"os"
-    "strings"
+	"strings"
 
 	"github.com/coredns/coredns/plugin"
-    "github.com/coredns/coredns/request"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
+	"github.com/coredns/coredns/request"
 
+	"github.com/hashicorp/mdns"
 	"github.com/miekg/dns"
 	"golang.org/x/net/context"
-    "github.com/hashicorp/mdns"
 )
 
 var log = clog.NewWithPlugin("hello")
 
 type Hello struct {
-    Next plugin.Handler
+	Next plugin.Handler
 }
 
 func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
-    log.Debug("Received query")
-    fmt.Println("Hello world!")
-    msg := new(dns.Msg)
-    msg.SetReply(r)
-    state := request.Request{W: w, Req: r}
+	log.Debug("Received query")
+	fmt.Println("Hello world!")
+	msg := new(dns.Msg)
+	msg.SetReply(r)
+	state := request.Request{W: w, Req: r}
 
-    if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA {
-        fmt.Println("Bailing")
-        return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
-    }
+	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA {
+		fmt.Println("Bailing")
+		return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
+	}
 
-    // MDNS browsing
-    entriesCh := make(chan *mdns.ServiceEntry, 4)
-    mdnsHosts := make(map[string]*mdns.ServiceEntry)
-    go func() {
-        for entry := range entriesCh {
-            fmt.Printf("Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Host, entry.AddrV4, entry.AddrV6)
-            // Hacky - coerce .local to our domain
-            // I was having trouble using domains other than .local. Need further investigation.
-            hostCustomDomain := strings.Replace(entry.Host, ".local.", ".fooxample.com.", 1)
-            mdnsHosts[hostCustomDomain] = entry
-        }
-    }()
+	// MDNS browsing
+	entriesCh := make(chan *mdns.ServiceEntry, 4)
+	mdnsHosts := make(map[string]*mdns.ServiceEntry)
+	go func() {
+		for entry := range entriesCh {
+			fmt.Printf("Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Host, entry.AddrV4, entry.AddrV6)
+			// Hacky - coerce .local to our domain
+			// I was having trouble using domains other than .local. Need further investigation.
+			hostCustomDomain := strings.Replace(entry.Host, ".local.", ".fooxample.com.", 1)
+			mdnsHosts[hostCustomDomain] = entry
+		}
+	}()
 
-    mdns.Lookup("_workstation._tcp", entriesCh)
-    close(entriesCh)
-    fmt.Println(mdnsHosts)
+	mdns.Lookup("_workstation._tcp", entriesCh)
+	close(entriesCh)
+	fmt.Println(mdnsHosts)
 
-    answerEntry, present := mdnsHosts[state.Name()]
-    if present {
-        aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
-        msg.Answer = []dns.RR{&dns.A{Hdr: aheader, A: answerEntry.AddrV4}}
-        aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
-        msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
-        fmt.Println(msg)
-        w.WriteMsg(msg)
-        return dns.RcodeSuccess, nil
-    }
-    return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
+	answerEntry, present := mdnsHosts[state.Name()]
+	if present {
+		aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
+		msg.Answer = []dns.RR{&dns.A{Hdr: aheader, A: answerEntry.AddrV4}}
+		aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
+		msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+		fmt.Println(msg)
+		w.WriteMsg(msg)
+		return dns.RcodeSuccess, nil
+	}
+	return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
 }
 
 func (h Hello) Name() string { return "hello" }
 
 type ResponsePrinter struct {
-    dns.ResponseWriter
+	dns.ResponseWriter
 }
 
 func NewResponsePrinter(w dns.ResponseWriter) *ResponsePrinter {
-    return &ResponsePrinter{ResponseWriter: w}
+	return &ResponsePrinter{ResponseWriter: w}
 }
 
 func (r *ResponsePrinter) WriteMsg(res *dns.Msg) error {
-    fmt.Fprintln(out, h)
-    return r.ResponseWriter.WriteMsg(res)
+	fmt.Fprintln(out, h)
+	return r.ResponseWriter.WriteMsg(res)
 }
 
 var out io.Writer = os.Stdout

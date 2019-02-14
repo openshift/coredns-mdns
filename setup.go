@@ -9,26 +9,26 @@ import (
 )
 
 func init() {
-    caddy.RegisterPlugin("hello", caddy.Plugin{
-        ServerType: "dns",
-        Action: setup,
-    })
+	caddy.RegisterPlugin("hello", caddy.Plugin{
+		ServerType: "dns",
+		Action:     setup,
+	})
 }
 
 func setup(c *caddy.Controller) error {
-    c.Next()
-    if c.NextArg() {
-        return plugin.Error("hello", c.ArgErr())
-    }
+	c.Next()
+	if c.NextArg() {
+		return plugin.Error("hello", c.ArgErr())
+	}
 
-    c.OnStartup(func() error {
-        //once.Do(func() { metrics.MustRegister(c, requestCount) })
-        return nil
-    })
+	c.OnStartup(func() error {
+		//once.Do(func() { metrics.MustRegister(c, requestCount) })
+		return nil
+	})
 
-    dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-        return Hello{Next: next}
-    })
+	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
+		return Hello{Next: next}
+	})
 
-    return nil
+	return nil
 }
