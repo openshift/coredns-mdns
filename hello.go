@@ -52,9 +52,9 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 
     answerEntry, present := mdnsHosts[state.Name()]
     if present {
-        aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
+        aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
         msg.Answer = []dns.RR{&dns.A{Hdr: aheader, A: answerEntry.AddrV4}}
-        aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 0}
+        aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
         msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
         fmt.Println(msg)
         w.WriteMsg(msg)
