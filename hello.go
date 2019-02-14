@@ -19,9 +19,11 @@ var log = clog.NewWithPlugin("hello")
 
 type Hello struct {
 	Next plugin.Handler
+	Domain string
 }
 
 func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	fqDomain := "." + h.Domain + "."
 	log.Debug("Received query")
 	fmt.Println("Hello world!")
 	msg := new(dns.Msg)
@@ -41,7 +43,8 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 			fmt.Printf("Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Host, entry.AddrV4, entry.AddrV6)
 			// Hacky - coerce .local to our domain
 			// I was having trouble using domains other than .local. Need further investigation.
-			hostCustomDomain := strings.Replace(entry.Host, ".local.", ".fooxample.com.", 1)
+			hostCustomDomain := strings.Replace(entry.Host, ".local.", fqDomain, 1)
+			fmt.Println(hostCustomDomain)
 			mdnsHosts[hostCustomDomain] = entry
 		}
 	}()

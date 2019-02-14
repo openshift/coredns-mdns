@@ -19,13 +19,15 @@ hello
 ## Examples
 
 As a prerequisite to using this plugin, there must be systems on the local
-network broadcasting mDNS records.
+network broadcasting mDNS records. Note that the .local domain will be
+replaced with the configured domain. For example, `test.local` would become
+`test.example.com` using the configuration below.
 
 Specify the domain for the records.
 
 ~~~ corefile
 example.com {
-	hello
+	hello example.com
 }
 ~~~
 

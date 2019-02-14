@@ -17,6 +17,8 @@ func init() {
 
 func setup(c *caddy.Controller) error {
 	c.Next()
+	c.NextArg()
+	domain := c.Val()
 	if c.NextArg() {
 		return plugin.Error("hello", c.ArgErr())
 	}
@@ -27,7 +29,7 @@ func setup(c *caddy.Controller) error {
 	})
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Hello{Next: next}
+		return Hello{Next: next, Domain: domain}
 	})
 
 	return nil
