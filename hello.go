@@ -66,9 +66,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 		for entry := range srvEntriesCh {
 			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
 			hostCustomDomain := h.ReplaceLocal(entry.Host)
-			hostCustomDomain = hostCustomDomain[0:len(hostCustomDomain) - 1]
 			srvName := strings.SplitN(h.ReplaceLocal(entry.Name), ".", 2)[1]
-			srvName = "_etcd-server-ssl._tcp.test.fooxample.com."
 			fmt.Println(srvName)
 			fmt.Println(hostCustomDomain)
 			entry.Host = hostCustomDomain
@@ -97,6 +95,8 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = []dns.RR{}
 		for _, host := range srvEntry {
+			// Port should probably be retrieved from the actual mdns record
+			// instead of hard-coded like this.
 			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: 2380})
 		}
 		fmt.Println(msg)
