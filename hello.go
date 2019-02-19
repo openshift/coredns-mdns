@@ -95,7 +95,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	go func() {
 		fmt.Println("Running SRV")
 		for entry := range srvEntriesCh {
-			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, Info: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.Info)
+			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
 			hostCustomDomain := h.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(h.ReplaceLocal(entry.Name), ".", 2)[1]
 			entry.Host = hostCustomDomain
@@ -146,9 +146,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	if present {
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
 		for _, host := range srvEntry {
-			// Port should probably be retrieved from the actual mdns record
-			// instead of hard-coded like this.
-			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: 2380})
+			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: uint16(host.Port)})
 		}
 		fmt.Println(msg)
 		w.WriteMsg(msg)
