@@ -1,4 +1,4 @@
-package hello
+package mdns
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-var log = clog.NewWithPlugin("hello")
+var log = clog.NewWithPlugin("mdns")
 
 // Type to sort entries by their Host attribute
 type byHost []*mdns.ServiceEntry
@@ -35,18 +35,18 @@ func (s byHost) Less(i, j int) bool {
 }
 
 
-type Hello struct {
+type MDNS struct {
 	Next plugin.Handler
 	Domain string
 }
 
-func (h Hello) ReplaceLocal(input string) (string) {
+func (m MDNS) ReplaceLocal(input string) (string) {
 	// Replace .local domain with our configured custom domain
-	fqDomain := "." + h.Domain + "."
+	fqDomain := "." + m.Domain + "."
 	return input[0:len(input) - 7] + fqDomain
 }
 
-func (h Hello) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*mdns.ServiceEntry, name string) bool {
+func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*mdns.ServiceEntry, name string) bool {
 	// Add A and AAAA record for name (if it exists) to msg.
 	// A records need to be returned in both A and CNAME queries, this function
 	// provides common code for doing so.
@@ -61,7 +61,7 @@ func (h Hello) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string
 	return false
 }
 
-func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 
 	log.Debug("Received query")
 	fmt.Println("Hello world!")
@@ -71,7 +71,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 
 	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
 		fmt.Println("Bailing")
-		return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
+		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
 	// MDNS browsing
@@ -87,7 +87,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 			// I was having trouble using domains other than .local. Need further investigation.
 			// After further investigation, maybe this is working as intended:
 			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
-			hostCustomDomain := h.ReplaceLocal(entry.Host)
+			hostCustomDomain := m.ReplaceLocal(entry.Host)
 			mdnsHosts[hostCustomDomain] = entry
 		}
 	}()
@@ -96,8 +96,8 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 		fmt.Println("Running SRV")
 		for entry := range srvEntriesCh {
 			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
-			hostCustomDomain := h.ReplaceLocal(entry.Host)
-			srvName := strings.SplitN(h.ReplaceLocal(entry.Name), ".", 2)[1]
+			hostCustomDomain := m.ReplaceLocal(entry.Host)
+			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
 			entry.Host = hostCustomDomain
 			srvHosts[srvName] = append(srvHosts[srvName], entry)
 		}
@@ -111,7 +111,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 
 	msg.Answer = []dns.RR{}
 
-	if h.AddARecord(msg, &state, mdnsHosts, state.Name()) {
+	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
 		fmt.Println(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
@@ -126,7 +126,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 			_, present := mdnsHosts[host.Host]
 			// Ignore entries that point to hosts we don't know about
 			if present {
-				cname := "etcd-" + strconv.Itoa(i) + "." + h.Domain + "."
+				cname := "etcd-" + strconv.Itoa(i) + "." + m.Domain + "."
 				cnames[cname] = host.Host
 			}
 		}
@@ -136,7 +136,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	if present {
 		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
-		h.AddARecord(msg, &state, mdnsHosts, cnameTarget)
+		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
 		fmt.Println(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
@@ -152,10 +152,10 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
-	return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
+	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 }
 
-func (h Hello) Name() string { return "hello" }
+func (m MDNS) Name() string { return "mdns" }
 
 type ResponsePrinter struct {
 	dns.ResponseWriter
@@ -166,10 +166,10 @@ func NewResponsePrinter(w dns.ResponseWriter) *ResponsePrinter {
 }
 
 func (r *ResponsePrinter) WriteMsg(res *dns.Msg) error {
-	fmt.Fprintln(out, h)
+	fmt.Fprintln(out, m)
 	return r.ResponseWriter.WriteMsg(res)
 }
 
 var out io.Writer = os.Stdout
 
-const h = "hello"
+const m = "mdns"

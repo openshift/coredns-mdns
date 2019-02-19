@@ -1,4 +1,4 @@
-package hello
+package mdns
 
 import (
 	"github.com/coredns/coredns/core/dnsserver"
@@ -20,7 +20,7 @@ func setup(c *caddy.Controller) error {
 	c.NextArg()
 	domain := c.Val()
 	if c.NextArg() {
-		return plugin.Error("hello", c.ArgErr())
+		return plugin.Error("mdns", c.ArgErr())
 	}
 
 	c.OnStartup(func() error {
@@ -29,7 +29,7 @@ func setup(c *caddy.Controller) error {
 	})
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Hello{Next: next, Domain: domain}
+		return MDNS{Next: next, Domain: domain}
 	})
 
 	return nil
