@@ -19,8 +19,6 @@ func setup(c *caddy.Controller) error {
 	c.Next()
 	c.NextArg()
 	domain := c.Val()
-	c.NextArg()
-	cluster := c.Val()
 	if c.NextArg() {
 		return plugin.Error("hello", c.ArgErr())
 	}
@@ -31,7 +29,7 @@ func setup(c *caddy.Controller) error {
 	})
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Hello{Next: next, Domain: domain, Cluster: cluster}
+		return Hello{Next: next, Domain: domain}
 	})
 
 	return nil

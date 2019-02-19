@@ -20,7 +20,6 @@ var log = clog.NewWithPlugin("hello")
 type Hello struct {
 	Next plugin.Handler
 	Domain string
-	Cluster string
 }
 
 func (h Hello) ReplaceLocal(input string) (string) {
