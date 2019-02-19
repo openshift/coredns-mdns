@@ -46,6 +46,21 @@ func (h Hello) ReplaceLocal(input string) (string) {
 	return input[0:len(input) - 7] + fqDomain
 }
 
+func (h Hello) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*mdns.ServiceEntry, name string) bool {
+	// Add A and AAAA record for name (if it exists) to msg.
+	// A records need to be returned in both A and CNAME queries, this function
+	// provides common code for doing so.
+	answerEntry, present := hosts[name]
+	if present {
+		aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
+		msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrV4})
+		aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
+		msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+		return true
+	}
+	return false
+}
+
 func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 
 	log.Debug("Received query")
@@ -96,23 +111,19 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 
 	msg.Answer = []dns.RR{}
 
-	answerEntry, present := mdnsHosts[state.Name()]
-	if present {
-		aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrV4})
-		aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+	if h.AddARecord(msg, &state, mdnsHosts, state.Name()) {
 		fmt.Println(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
+
 	// Create CNAME mapping etcd-X.domain -> master-X.domain
 	cnames := make(map[string]string)
 	for _, entry := range srvHosts {
 		// We need this sorted so our CNAME indices are stable
 		sort.Sort(byHost(entry))
 		for i, host := range entry {
-			_, present = mdnsHosts[host.Host]
+			_, present := mdnsHosts[host.Host]
 			// Ignore entries that point to hosts we don't know about
 			if present {
 				cname := "etcd-" + strconv.Itoa(i) + "." + h.Domain + "."
@@ -125,6 +136,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	if present {
 		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
+		h.AddARecord(msg, &state, mdnsHosts, cnameTarget)
 		fmt.Println(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
