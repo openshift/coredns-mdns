@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	caddy.RegisterPlugin("hello", caddy.Plugin{
+	caddy.RegisterPlugin("mdns", caddy.Plugin{
 		ServerType: "dns",
 		Action:     setup,
 	})
