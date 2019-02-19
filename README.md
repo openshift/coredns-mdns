@@ -13,7 +13,7 @@ accessible through a standard DNS server.
 ## Syntax
 
 ~~~
-hello example.com
+mdns example.com
 ~~~
 
 ## Examples
@@ -27,7 +27,7 @@ Specify the domain for the records.
 
 ~~~ corefile
 example.com {
-	hello example.com
+	mdns example.com
 }
 ~~~
 
