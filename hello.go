@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/coredns/coredns/plugin"
@@ -16,6 +18,22 @@ import (
 )
 
 var log = clog.NewWithPlugin("hello")
+
+// Type to sort entries by their Host attribute
+type byHost []*mdns.ServiceEntry
+
+func (s byHost) Len() int {
+	return len(s)
+}
+
+func (s byHost) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s byHost) Less(i, j int) bool {
+	return s[i].Host < s[j].Host
+}
+
 
 type Hello struct {
 	Next plugin.Handler
@@ -36,7 +54,7 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
 
-	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV {
+	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
 		fmt.Println("Bailing")
 		return plugin.NextOrFailure(h.Name(), h.Next, ctx, w, r)
 	}
@@ -55,7 +73,6 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 			// After further investigation, maybe this is working as intended:
 			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
 			hostCustomDomain := h.ReplaceLocal(entry.Host)
-			fmt.Println(hostCustomDomain)
 			mdnsHosts[hostCustomDomain] = entry
 		}
 	}()
@@ -63,11 +80,9 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	go func() {
 		fmt.Println("Running SRV")
 		for entry := range srvEntriesCh {
-			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
+			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, Info: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.Info)
 			hostCustomDomain := h.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(h.ReplaceLocal(entry.Name), ".", 2)[1]
-			fmt.Println(srvName)
-			fmt.Println(hostCustomDomain)
 			entry.Host = hostCustomDomain
 			srvHosts[srvName] = append(srvHosts[srvName], entry)
 		}
@@ -79,20 +94,45 @@ func (h Hello) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 	fmt.Println(mdnsHosts)
 	fmt.Println(srvHosts)
 
+	msg.Answer = []dns.RR{}
+
 	answerEntry, present := mdnsHosts[state.Name()]
 	if present {
 		aheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = []dns.RR{&dns.A{Hdr: aheader, A: answerEntry.AddrV4}}
+		msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrV4})
 		aaaaheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
 		fmt.Println(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
+	// Create CNAME mapping etcd-X.domain -> master-X.domain
+	cnames := make(map[string]string)
+	for _, entry := range srvHosts {
+		// We need this sorted so our CNAME indices are stable
+		sort.Sort(byHost(entry))
+		for i, host := range entry {
+			_, present = mdnsHosts[host.Host]
+			// Ignore entries that point to hosts we don't know about
+			if present {
+				cname := "etcd-" + strconv.Itoa(i) + "." + h.Domain + "."
+				cnames[cname] = host.Host
+			}
+		}
+	}
+	fmt.Println(cnames)
+	cnameTarget, present := cnames[state.Name()]
+	if present {
+		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
+		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
+		fmt.Println(msg)
+		w.WriteMsg(msg)
+		return dns.RcodeSuccess, nil
+	}
+
 	srvEntry, present := srvHosts[state.Name()]
 	if present {
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = []dns.RR{}
 		for _, host := range srvEntry {
 			// Port should probably be retrieved from the actual mdns record
 			// instead of hard-coded like this.
