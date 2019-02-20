@@ -64,13 +64,12 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 
 	log.Debug("Received query")
-	fmt.Println("Hello world!")
 	msg := new(dns.Msg)
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
 
 	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
-		fmt.Println("Bailing")
+		log.Debug("Skipping due to unrecognized query type")
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
@@ -80,9 +79,9 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	mdnsHosts := make(map[string]*mdns.ServiceEntry)
 	srvHosts := make(map[string][]*mdns.ServiceEntry)
 	go func() {
-		fmt.Println("Running")
+		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
-			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
+			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
 			// Hacky - coerce .local to our domain
 			// I was having trouble using domains other than .local. Need further investigation.
 			// After further investigation, maybe this is working as intended:
@@ -93,9 +92,9 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	}()
 
 	go func() {
-		fmt.Println("Running SRV")
+		log.Debug("Retrieving SRV mDNS entries")
 		for entry := range srvEntriesCh {
-			fmt.Printf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
+			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
 			entry.Host = hostCustomDomain
@@ -106,13 +105,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	mdns.Lookup("_workstation._tcp", entriesCh)
 	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
 	close(entriesCh)
-	fmt.Println(mdnsHosts)
-	fmt.Println(srvHosts)
+	log.Debug(mdnsHosts)
+	log.Debug(srvHosts)
 
 	msg.Answer = []dns.RR{}
 
 	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
-		fmt.Println(msg)
+		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
@@ -131,13 +130,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 			}
 		}
 	}
-	fmt.Println(cnames)
+	log.Debug(cnames)
 	cnameTarget, present := cnames[state.Name()]
 	if present {
 		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
 		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
-		fmt.Println(msg)
+		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
@@ -148,7 +147,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		for _, host := range srvEntry {
 			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: uint16(host.Port)})
 		}
-		fmt.Println(msg)
+		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
