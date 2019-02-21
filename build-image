@@ -1,0 +1,23 @@
+#!/bin/bash
+# CoreDNS needs to have been built with support for this plugin included.
+# The build script will pull the coredns binary from the coredns git repo.
+
+set -x
+
+# build a minimal image
+newcontainer=$(buildah from scratch)
+scratchmnt=$(buildah mount $newcontainer)
+
+# install
+cp ../../coredns/coredns/coredns "$scratchmnt"
+
+# set some config info
+buildah config --label name=coredns-mdns \
+ --label maintainer="Ben Nemec <bnemec@redhat.com>" \
+ --entrypoint '["/coredns"]' \
+ "$newcontainer"
+
+# commit the image
+buildah unmount "$newcontainer"
+buildah commit "$newcontainer" bnemec/coredns-mdns
+buildah rm $newcontainer
