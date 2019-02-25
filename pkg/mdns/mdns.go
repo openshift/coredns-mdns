@@ -34,16 +34,15 @@ func (s byHost) Less(i, j int) bool {
 	return s[i].Host < s[j].Host
 }
 
-
 type MDNS struct {
-	Next plugin.Handler
+	Next   plugin.Handler
 	Domain string
 }
 
-func (m MDNS) ReplaceLocal(input string) (string) {
+func (m MDNS) ReplaceLocal(input string) string {
 	// Replace .local domain with our configured custom domain
 	fqDomain := "." + m.Domain + "."
-	return input[0:len(input) - 7] + fqDomain
+	return input[0:len(input)-7] + fqDomain
 }
 
 func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*mdns.ServiceEntry, name string) bool {
