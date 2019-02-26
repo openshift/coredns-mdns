@@ -67,6 +67,11 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
 
+	if state.QName()[len(state.QName())-len(m.Domain)-1:] != m.Domain + "." {
+		log.Debug("Skipping due to query not in our domain")
+		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
+	}
+
 	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
 		log.Debug("Skipping due to unrecognized query type")
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
