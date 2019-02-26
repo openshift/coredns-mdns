@@ -41,7 +41,7 @@ type MDNS struct {
 
 func (m MDNS) ReplaceLocal(input string) string {
 	// Replace .local domain with our configured custom domain
-	fqDomain := "." + m.Domain + "."
+	fqDomain := "." + strings.TrimSuffix(m.Domain, ".") + "."
 	return input[0:len(input)-7] + fqDomain
 }
 
@@ -66,8 +66,9 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg := new(dns.Msg)
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
+	unqualifiedDomain := strings.TrimSuffix(m.Domain, ".")
 
-	if state.QName()[len(state.QName())-len(m.Domain)-1:] != m.Domain + "." {
+	if !strings.HasSuffix(state.QName(), unqualifiedDomain + ".") {
 		log.Debug("Skipping due to query not in our domain")
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
@@ -129,7 +130,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 			_, present := mdnsHosts[host.Host]
 			// Ignore entries that point to hosts we don't know about
 			if present {
-				cname := "etcd-" + strconv.Itoa(i) + "." + m.Domain + "."
+				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
 				cnames[cname] = host.Host
 			}
 		}
