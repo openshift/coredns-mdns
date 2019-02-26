@@ -8,7 +8,18 @@ import (
 	"github.com/coredns/coredns/coremain"
 )
 
-var directives = append([]string{"mdns"}, dnsserver.Directives...)
+// We need to inject our plugin after the cache plugin for caching to work
+func findCache() int {
+	for i, value := range dnsserver.Directives {
+		if value == "cache" {
+			return i + 1
+		}
+	}
+	return -1
+}
+
+var cachePos = findCache()
+var directives = append(dnsserver.Directives[:cachePos], append([]string{"mdns"}, dnsserver.Directives[cachePos:]...)...)
 
 func init() {
 	dnsserver.Directives = directives
