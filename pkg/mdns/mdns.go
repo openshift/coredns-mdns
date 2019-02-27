@@ -108,8 +108,9 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	}()
 
 	mdns.Lookup("_workstation._tcp", entriesCh)
-	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
 	close(entriesCh)
+	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
+	close(srvEntriesCh)
 	log.Debug(mdnsHosts)
 	log.Debug(srvHosts)
 
