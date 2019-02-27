@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/coredns/coredns/plugin"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
@@ -35,8 +36,11 @@ func (s byHost) Less(i, j int) bool {
 }
 
 type MDNS struct {
+	sync.RWMutex
 	Next   plugin.Handler
 	Domain string
+	mdnsHosts map[string]*mdns.ServiceEntry
+	srvHosts map[string][]*mdns.ServiceEntry
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -81,8 +85,8 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	// MDNS browsing
 	entriesCh := make(chan *mdns.ServiceEntry, 4)
 	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
-	mdnsHosts := make(map[string]*mdns.ServiceEntry)
-	srvHosts := make(map[string][]*mdns.ServiceEntry)
+	m.mdnsHosts = make(map[string]*mdns.ServiceEntry)
+	m.srvHosts = make(map[string][]*mdns.ServiceEntry)
 	go func() {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
@@ -92,7 +96,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 			// After further investigation, maybe this is working as intended:
 			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
-			mdnsHosts[hostCustomDomain] = entry
+			m.mdnsHosts[hostCustomDomain] = entry
 		}
 	}()
 
@@ -103,7 +107,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
 			entry.Host = hostCustomDomain
-			srvHosts[srvName] = append(srvHosts[srvName], entry)
+			m.srvHosts[srvName] = append(m.srvHosts[srvName], entry)
 		}
 	}()
 
@@ -111,12 +115,12 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	close(entriesCh)
 	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
 	close(srvEntriesCh)
-	log.Debug(mdnsHosts)
-	log.Debug(srvHosts)
+	log.Debug(m.mdnsHosts)
+	log.Debug(m.srvHosts)
 
 	msg.Answer = []dns.RR{}
 
-	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
+	if m.AddARecord(msg, &state, m.mdnsHosts, state.Name()) {
 		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
@@ -124,11 +128,11 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 
 	// Create CNAME mapping etcd-X.domain -> master-X.domain
 	cnames := make(map[string]string)
-	for _, entry := range srvHosts {
+	for _, entry := range m.srvHosts {
 		// We need this sorted so our CNAME indices are stable
 		sort.Sort(byHost(entry))
 		for i, host := range entry {
-			_, present := mdnsHosts[host.Host]
+			_, present := m.mdnsHosts[host.Host]
 			// Ignore entries that point to hosts we don't know about
 			if present {
 				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
@@ -141,13 +145,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	if present {
 		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
-		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
+		m.AddARecord(msg, &state, m.mdnsHosts, cnameTarget)
 		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
 
-	srvEntry, present := srvHosts[state.Name()]
+	srvEntry, present := m.srvHosts[state.Name()]
 	if present {
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
 		for _, host := range srvEntry {
