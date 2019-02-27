@@ -1,10 +1,12 @@
 package mdns
 
 import (
+	"time"
+
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
-	//"github.com/coredns/coredns/plugin/metrics"
 
+	"github.com/hashicorp/mdns"
 	"github.com/mholt/caddy"
 )
 
@@ -23,14 +25,30 @@ func setup(c *caddy.Controller) error {
 		return plugin.Error("mdns", c.ArgErr())
 	}
 
+	// Because the plugin interface uses a value receiver, we need to make these
+	// pointers so all copies of the plugin point at the same maps.
+	mdnsHosts := make(map[string]*mdns.ServiceEntry)
+	srvHosts := make(map[string][]*mdns.ServiceEntry)
+	m := MDNS{Domain: domain, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
+
 	c.OnStartup(func() error {
-		//once.Do(func() { metrics.MustRegister(c, requestCount) })
+		go browseLoop(&m)
 		return nil
 	})
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return MDNS{Next: next, Domain: domain}
+		m.Next = next
+		return m
 	})
 
 	return nil
+}
+
+func browseLoop(m *MDNS) {
+	for {
+		m.BrowseMDNS()
+		// The OpenShift Corefile configures caching for 30 seconds, so there's little
+		// point in updating more often than that.
+		time.Sleep(30 * time.Second)
+	}
 }
