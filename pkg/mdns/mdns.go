@@ -82,43 +82,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
-	// MDNS browsing
-	entriesCh := make(chan *mdns.ServiceEntry, 4)
-	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
-	m.mdnsHosts = make(map[string]*mdns.ServiceEntry)
-	m.srvHosts = make(map[string][]*mdns.ServiceEntry)
-	go func() {
-		log.Debug("Retrieving mDNS entries")
-		for entry := range entriesCh {
-			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
-			// Hacky - coerce .local to our domain
-			// I was having trouble using domains other than .local. Need further investigation.
-			// After further investigation, maybe this is working as intended:
-			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
-			hostCustomDomain := m.ReplaceLocal(entry.Host)
-			m.mdnsHosts[hostCustomDomain] = entry
-		}
-	}()
-
-	go func() {
-		log.Debug("Retrieving SRV mDNS entries")
-		for entry := range srvEntriesCh {
-			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
-			hostCustomDomain := m.ReplaceLocal(entry.Host)
-			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
-			entry.Host = hostCustomDomain
-			m.srvHosts[srvName] = append(m.srvHosts[srvName], entry)
-		}
-	}()
-
-	mdns.Lookup("_workstation._tcp", entriesCh)
-	close(entriesCh)
-	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
-	close(srvEntriesCh)
-	log.Debug(m.mdnsHosts)
-	log.Debug(m.srvHosts)
+	// TODO: Move to background goroutine
+	m.BrowseMDNS()
 
 	msg.Answer = []dns.RR{}
+
+	m.RLock()
+	defer m.RUnlock()
 
 	if m.AddARecord(msg, &state, m.mdnsHosts, state.Name()) {
 		log.Debug(msg)
@@ -162,6 +132,45 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return dns.RcodeSuccess, nil
 	}
 	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
+}
+
+func (m *MDNS) BrowseMDNS() {
+	entriesCh := make(chan *mdns.ServiceEntry, 4)
+	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
+	m.Lock()
+	defer m.Unlock()
+	m.mdnsHosts = make(map[string]*mdns.ServiceEntry)
+	m.srvHosts = make(map[string][]*mdns.ServiceEntry)
+	go func() {
+		log.Debug("Retrieving mDNS entries")
+		for entry := range entriesCh {
+			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
+			// Hacky - coerce .local to our domain
+			// I was having trouble using domains other than .local. Need further investigation.
+			// After further investigation, maybe this is working as intended:
+			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
+			hostCustomDomain := m.ReplaceLocal(entry.Host)
+			m.mdnsHosts[hostCustomDomain] = entry
+		}
+	}()
+
+	go func() {
+		log.Debug("Retrieving SRV mDNS entries")
+		for entry := range srvEntriesCh {
+			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
+			hostCustomDomain := m.ReplaceLocal(entry.Host)
+			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
+			entry.Host = hostCustomDomain
+			m.srvHosts[srvName] = append(m.srvHosts[srvName], entry)
+		}
+	}()
+
+	mdns.Lookup("_workstation._tcp", entriesCh)
+	close(entriesCh)
+	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
+	close(srvEntriesCh)
+	log.Debug(m.mdnsHosts)
+	log.Debug(m.srvHosts)
 }
 
 func (m MDNS) Name() string { return "mdns" }
