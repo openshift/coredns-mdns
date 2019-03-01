@@ -39,8 +39,8 @@ type MDNS struct {
 	sync.RWMutex
 	Next   plugin.Handler
 	Domain string
-	mdnsHosts map[string]*mdns.ServiceEntry
-	srvHosts map[string][]*mdns.ServiceEntry
+	mdnsHosts *map[string]*mdns.ServiceEntry
+	srvHosts *map[string][]*mdns.ServiceEntry
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -71,6 +71,9 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
 	unqualifiedDomain := strings.TrimSuffix(m.Domain, ".")
+	// Just for convenience so we don't have to keep dereferencing these
+	mdnsHosts := *m.mdnsHosts
+	srvHosts := *m.srvHosts
 
 	if !strings.HasSuffix(state.QName(), unqualifiedDomain + ".") {
 		log.Debug("Skipping due to query not in our domain")
@@ -82,15 +85,12 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
-	// TODO: Move to background goroutine
-	m.BrowseMDNS()
-
 	msg.Answer = []dns.RR{}
 
 	m.RLock()
 	defer m.RUnlock()
 
-	if m.AddARecord(msg, &state, m.mdnsHosts, state.Name()) {
+	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
 		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
@@ -98,11 +98,11 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 
 	// Create CNAME mapping etcd-X.domain -> master-X.domain
 	cnames := make(map[string]string)
-	for _, entry := range m.srvHosts {
+	for _, entry := range srvHosts {
 		// We need this sorted so our CNAME indices are stable
 		sort.Sort(byHost(entry))
 		for i, host := range entry {
-			_, present := m.mdnsHosts[host.Host]
+			_, present := mdnsHosts[host.Host]
 			// Ignore entries that point to hosts we don't know about
 			if present {
 				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
@@ -115,13 +115,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	if present {
 		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
 		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
-		m.AddARecord(msg, &state, m.mdnsHosts, cnameTarget)
+		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
 		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
 
-	srvEntry, present := m.srvHosts[state.Name()]
+	srvEntry, present := srvHosts[state.Name()]
 	if present {
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
 		for _, host := range srvEntry {
@@ -139,8 +139,14 @@ func (m *MDNS) BrowseMDNS() {
 	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
 	m.Lock()
 	defer m.Unlock()
-	m.mdnsHosts = make(map[string]*mdns.ServiceEntry)
-	m.srvHosts = make(map[string][]*mdns.ServiceEntry)
+	// Clear maps so we don't have stale entries and so we don't append infinitely
+	// to the srvHosts map
+	for k := range *m.mdnsHosts {
+		delete(*m.mdnsHosts, k)
+	}
+	for k := range *m.srvHosts {
+		delete(*m.srvHosts, k)
+	}
 	go func() {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
@@ -150,7 +156,7 @@ func (m *MDNS) BrowseMDNS() {
 			// After further investigation, maybe this is working as intended:
 			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
-			m.mdnsHosts[hostCustomDomain] = entry
+			(*m.mdnsHosts)[hostCustomDomain] = entry
 		}
 	}()
 
@@ -161,7 +167,7 @@ func (m *MDNS) BrowseMDNS() {
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
 			entry.Host = hostCustomDomain
-			m.srvHosts[srvName] = append(m.srvHosts[srvName], entry)
+			(*m.srvHosts)[srvName] = append((*m.srvHosts)[srvName], entry)
 		}
 	}()
 
