@@ -113,7 +113,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	log.Debug(cnames)
 	cnameTarget, present := cnames[state.Name()]
 	if present {
-		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
+		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
 		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
 		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
 		log.Debug(msg)
@@ -123,7 +123,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 
 	srvEntry, present := srvHosts[state.Name()]
 	if present {
-		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
+		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 0}
 		for _, host := range srvEntry {
 			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: uint16(host.Port)})
 		}

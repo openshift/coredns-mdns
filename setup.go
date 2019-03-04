@@ -47,8 +47,8 @@ func setup(c *caddy.Controller) error {
 func browseLoop(m *MDNS) {
 	for {
 		m.BrowseMDNS()
-		// The OpenShift Corefile configures caching for 30 seconds, so there's little
-		// point in updating more often than that.
-		time.Sleep(30 * time.Second)
+		// 5 seconds seems to be the minimum ttl that the cache plugin will allow
+		// Since each browse operation takes around 2 seconds, this should be fine
+		time.Sleep(5 * time.Second)
 	}
 }
