@@ -36,9 +36,9 @@ func (s byHost) Less(i, j int) bool {
 }
 
 type MDNS struct {
-	sync.RWMutex
 	Next   plugin.Handler
 	Domain string
+	mutex *sync.RWMutex
 	mdnsHosts *map[string]*mdns.ServiceEntry
 	srvHosts *map[string][]*mdns.ServiceEntry
 }
@@ -87,8 +87,8 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 
 	msg.Answer = []dns.RR{}
 
-	m.RLock()
-	defer m.RUnlock()
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
 
 	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
 		log.Debug(msg)
@@ -137,8 +137,8 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 func (m *MDNS) BrowseMDNS() {
 	entriesCh := make(chan *mdns.ServiceEntry, 4)
 	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
-	m.Lock()
-	defer m.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	// Clear maps so we don't have stale entries and so we don't append infinitely
 	// to the srvHosts map
 	for k := range *m.mdnsHosts {
