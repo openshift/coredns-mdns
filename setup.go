@@ -1,6 +1,7 @@
 package mdns
 
 import (
+	"sync"
 	"time"
 
 	"github.com/coredns/coredns/core/dnsserver"
@@ -29,7 +30,8 @@ func setup(c *caddy.Controller) error {
 	// pointers so all copies of the plugin point at the same maps.
 	mdnsHosts := make(map[string]*mdns.ServiceEntry)
 	srvHosts := make(map[string][]*mdns.ServiceEntry)
-	m := MDNS{Domain: domain, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
+	mutex := sync.RWMutex{}
+	m := MDNS{Domain: domain, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
