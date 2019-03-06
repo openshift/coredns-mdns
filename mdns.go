@@ -137,16 +137,8 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 func (m *MDNS) BrowseMDNS() {
 	entriesCh := make(chan *mdns.ServiceEntry, 4)
 	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	// Clear maps so we don't have stale entries and so we don't append infinitely
-	// to the srvHosts map
-	for k := range *m.mdnsHosts {
-		delete(*m.mdnsHosts, k)
-	}
-	for k := range *m.srvHosts {
-		delete(*m.srvHosts, k)
-	}
+	mdnsHosts := make(map[string]*mdns.ServiceEntry)
+	srvHosts := make(map[string][]*mdns.ServiceEntry)
 	go func() {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
@@ -156,7 +148,7 @@ func (m *MDNS) BrowseMDNS() {
 			// After further investigation, maybe this is working as intended:
 			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
-			(*m.mdnsHosts)[hostCustomDomain] = entry
+			mdnsHosts[hostCustomDomain] = entry
 		}
 	}()
 
@@ -167,7 +159,7 @@ func (m *MDNS) BrowseMDNS() {
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
 			entry.Host = hostCustomDomain
-			(*m.srvHosts)[srvName] = append((*m.srvHosts)[srvName], entry)
+			srvHosts[srvName] = append(srvHosts[srvName], entry)
 		}
 	}()
 
@@ -175,6 +167,23 @@ func (m *MDNS) BrowseMDNS() {
 	close(entriesCh)
 	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
 	close(srvEntriesCh)
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	// Clear maps so we don't have stale entries
+	for k := range *m.mdnsHosts {
+		delete(*m.mdnsHosts, k)
+	}
+	for k := range *m.srvHosts {
+		delete(*m.srvHosts, k)
+	}
+	// Copy values into the shared maps only after we've collected all of them.
+	// This prevents us from having to lock during the entire mdns browse time.
+	for k, v := range mdnsHosts {
+		(*m.mdnsHosts)[k] = v
+	}
+	for k, v := range srvHosts {
+		(*m.srvHosts)[k] = v
+	}
 	log.Debug(m.mdnsHosts)
 	log.Debug(m.srvHosts)
 }
