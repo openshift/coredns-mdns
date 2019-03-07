@@ -1,12 +1,22 @@
+diff --git a/go.mod b/go.mod
+index 0f5fa84c..f1d0ff42 100644
+--- a/go.mod
++++ b/go.mod
+@@ -70,3 +70,5 @@ require (
+ 	k8s.io/kube-openapi v0.0.0-20180928202339-9dfdf9be683f
+ 	sigs.k8s.io/yaml v1.1.0
+ )
++
++replace github.com/metalkube/coredns-mdns => /go/src/github.com/metalkube/coredns-mdns/
 diff --git a/plugin.cfg b/plugin.cfg
-index 4ada8f29..2a7f1845 100644
+index 4ada8f29..cb614642 100644
 --- a/plugin.cfg
 +++ b/plugin.cfg
 @@ -36,6 +36,7 @@ dnstap:dnstap
  chaos:chaos
  loadbalance:loadbalance
  cache:cache
-+mdns:github.com/metalkube/coredns-mdns/pkg/mdns
++mdns:github.com/metalkube/coredns-mdns
  rewrite:rewrite
  dnssec:dnssec
  autopath:autopath
