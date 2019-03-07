@@ -1,0 +1,12 @@
+diff --git a/plugin.cfg b/plugin.cfg
+index 4ada8f29..2a7f1845 100644
+--- a/plugin.cfg
++++ b/plugin.cfg
+@@ -36,6 +36,7 @@ dnstap:dnstap
+ chaos:chaos
+ loadbalance:loadbalance
+ cache:cache
++mdns:github.com/metalkube/coredns-mdns/pkg/mdns
+ rewrite:rewrite
+ dnssec:dnssec
+ autopath:autopath
