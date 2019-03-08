@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -19,21 +17,6 @@ import (
 )
 
 var log = clog.NewWithPlugin("mdns")
-
-// Type to sort entries by their Host attribute
-type byHost []*mdns.ServiceEntry
-
-func (s byHost) Len() int {
-	return len(s)
-}
-
-func (s byHost) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s byHost) Less(i, j int) bool {
-	return s[i].Host < s[j].Host
-}
 
 type MDNS struct {
 	Next   plugin.Handler
@@ -99,13 +82,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	// Create CNAME mapping etcd-X.domain -> master-X.domain
 	cnames := make(map[string]string)
 	for _, entry := range srvHosts {
-		// We need this sorted so our CNAME indices are stable
-		sort.Sort(byHost(entry))
-		for i, host := range entry {
+		for _, host := range entry {
 			_, present := mdnsHosts[host.Host]
 			// Ignore entries that point to hosts we don't know about
 			if present {
-				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
+				shortname := strings.Split(host.Host, ".")[0]
+				nodeIndex := shortname[strings.LastIndex(shortname, "-")+1:]
+				cname := "etcd-" + nodeIndex + "." + unqualifiedDomain + "."
 				cnames[cname] = host.Host
 			}
 		}
