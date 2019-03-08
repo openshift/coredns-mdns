@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/coredns/coredns/plugin"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
@@ -37,6 +38,9 @@ func (s byHost) Less(i, j int) bool {
 type MDNS struct {
 	Next   plugin.Handler
 	Domain string
+	mutex *sync.RWMutex
+	mdnsHosts *map[string]*mdns.ServiceEntry
+	srvHosts *map[string][]*mdns.ServiceEntry
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -67,6 +71,9 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
 	unqualifiedDomain := strings.TrimSuffix(m.Domain, ".")
+	// Just for convenience so we don't have to keep dereferencing these
+	mdnsHosts := *m.mdnsHosts
+	srvHosts := *m.srvHosts
 
 	if !strings.HasSuffix(state.QName(), unqualifiedDomain + ".") {
 		log.Debug("Skipping due to query not in our domain")
@@ -78,7 +85,56 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
-	// MDNS browsing
+	msg.Answer = []dns.RR{}
+
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
+		log.Debug(msg)
+		w.WriteMsg(msg)
+		return dns.RcodeSuccess, nil
+	}
+
+	// Create CNAME mapping etcd-X.domain -> master-X.domain
+	cnames := make(map[string]string)
+	for _, entry := range srvHosts {
+		// We need this sorted so our CNAME indices are stable
+		sort.Sort(byHost(entry))
+		for i, host := range entry {
+			_, present := mdnsHosts[host.Host]
+			// Ignore entries that point to hosts we don't know about
+			if present {
+				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
+				cnames[cname] = host.Host
+			}
+		}
+	}
+	log.Debug(cnames)
+	cnameTarget, present := cnames[state.Name()]
+	if present {
+		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
+		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
+		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
+		log.Debug(msg)
+		w.WriteMsg(msg)
+		return dns.RcodeSuccess, nil
+	}
+
+	srvEntry, present := srvHosts[state.Name()]
+	if present {
+		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 0}
+		for _, host := range srvEntry {
+			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: uint16(host.Port)})
+		}
+		log.Debug(msg)
+		w.WriteMsg(msg)
+		return dns.RcodeSuccess, nil
+	}
+	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
+}
+
+func (m *MDNS) BrowseMDNS() {
 	entriesCh := make(chan *mdns.ServiceEntry, 4)
 	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
 	mdnsHosts := make(map[string]*mdns.ServiceEntry)
@@ -111,53 +167,25 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	close(entriesCh)
 	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
 	close(srvEntriesCh)
-	log.Debug(mdnsHosts)
-	log.Debug(srvHosts)
-
-	msg.Answer = []dns.RR{}
-
-	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	// Clear maps so we don't have stale entries
+	for k := range *m.mdnsHosts {
+		delete(*m.mdnsHosts, k)
 	}
-
-	// Create CNAME mapping etcd-X.domain -> master-X.domain
-	cnames := make(map[string]string)
-	for _, entry := range srvHosts {
-		// We need this sorted so our CNAME indices are stable
-		sort.Sort(byHost(entry))
-		for i, host := range entry {
-			_, present := mdnsHosts[host.Host]
-			// Ignore entries that point to hosts we don't know about
-			if present {
-				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
-				cnames[cname] = host.Host
-			}
-		}
+	for k := range *m.srvHosts {
+		delete(*m.srvHosts, k)
 	}
-	log.Debug(cnames)
-	cnameTarget, present := cnames[state.Name()]
-	if present {
-		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
-		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
+	// Copy values into the shared maps only after we've collected all of them.
+	// This prevents us from having to lock during the entire mdns browse time.
+	for k, v := range mdnsHosts {
+		(*m.mdnsHosts)[k] = v
 	}
-
-	srvEntry, present := srvHosts[state.Name()]
-	if present {
-		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 60}
-		for _, host := range srvEntry {
-			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: uint16(host.Port)})
-		}
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
+	for k, v := range srvHosts {
+		(*m.srvHosts)[k] = v
 	}
-	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
+	log.Debug(m.mdnsHosts)
+	log.Debug(m.srvHosts)
 }
 
 func (m MDNS) Name() string { return "mdns" }
