@@ -169,9 +169,9 @@ func (m *MDNS) BrowseMDNS() {
 	for k, v := range cnames {
 		(*m.cnames)[k] = v
 	}
-	log.Debug(m.mdnsHosts)
-	log.Debug(m.srvHosts)
-	log.Debug(m.cnames)
+	log.Debugf("mdnsHosts: %v", m.mdnsHosts)
+	log.Debugf("srvHosts: %v", m.srvHosts)
+	log.Debugf("cnames: %v", m.cnames)
 }
 
 func (m MDNS) Name() string { return "mdns" }
