@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -20,27 +18,13 @@ import (
 
 var log = clog.NewWithPlugin("mdns")
 
-// Type to sort entries by their Host attribute
-type byHost []*mdns.ServiceEntry
-
-func (s byHost) Len() int {
-	return len(s)
-}
-
-func (s byHost) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s byHost) Less(i, j int) bool {
-	return s[i].Host < s[j].Host
-}
-
 type MDNS struct {
 	Next   plugin.Handler
 	Domain string
 	mutex *sync.RWMutex
 	mdnsHosts *map[string]*mdns.ServiceEntry
 	srvHosts *map[string][]*mdns.ServiceEntry
+	cnames *map[string]string
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -64,18 +48,25 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 	return false
 }
 
+// Return the node index from a hostname.
+// For example, the return value from "master-0.ostest.test.metalkube.org" would be "0"
+func GetIndex(host string) string {
+	shortname := strings.Split(host, ".")[0]
+	return shortname[strings.LastIndex(shortname, "-")+1:]
+}
+
 func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 
 	log.Debug("Received query")
 	msg := new(dns.Msg)
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
-	unqualifiedDomain := strings.TrimSuffix(m.Domain, ".")
 	// Just for convenience so we don't have to keep dereferencing these
 	mdnsHosts := *m.mdnsHosts
 	srvHosts := *m.srvHosts
+	cnames := *m.cnames
 
-	if !strings.HasSuffix(state.QName(), unqualifiedDomain + ".") {
+	if !strings.HasSuffix(state.QName(), m.Domain + ".") {
 		log.Debug("Skipping due to query not in our domain")
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
@@ -96,21 +87,6 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return dns.RcodeSuccess, nil
 	}
 
-	// Create CNAME mapping etcd-X.domain -> master-X.domain
-	cnames := make(map[string]string)
-	for _, entry := range srvHosts {
-		// We need this sorted so our CNAME indices are stable
-		sort.Sort(byHost(entry))
-		for i, host := range entry {
-			_, present := mdnsHosts[host.Host]
-			// Ignore entries that point to hosts we don't know about
-			if present {
-				cname := "etcd-" + strconv.Itoa(i) + "." + unqualifiedDomain + "."
-				cnames[cname] = host.Host
-			}
-		}
-	}
-	log.Debug(cnames)
 	cnameTarget, present := cnames[state.Name()]
 	if present {
 		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
@@ -139,6 +115,7 @@ func (m *MDNS) BrowseMDNS() {
 	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
 	mdnsHosts := make(map[string]*mdns.ServiceEntry)
 	srvHosts := make(map[string][]*mdns.ServiceEntry)
+	cnames := make(map[string]string)
 	go func() {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
@@ -158,7 +135,9 @@ func (m *MDNS) BrowseMDNS() {
 			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", entry.Name, entry.Host, entry.AddrV4, entry.AddrV6)
 			hostCustomDomain := m.ReplaceLocal(entry.Host)
 			srvName := strings.SplitN(m.ReplaceLocal(entry.Name), ".", 2)[1]
-			entry.Host = hostCustomDomain
+			cname := "etcd-" + GetIndex(entry.Host) + "." + m.Domain + "."
+			entry.Host = cname
+			cnames[cname] = hostCustomDomain
 			srvHosts[srvName] = append(srvHosts[srvName], entry)
 		}
 	}()
@@ -176,6 +155,9 @@ func (m *MDNS) BrowseMDNS() {
 	for k := range *m.srvHosts {
 		delete(*m.srvHosts, k)
 	}
+	for k := range *m.cnames {
+		delete(*m.cnames, k)
+	}
 	// Copy values into the shared maps only after we've collected all of them.
 	// This prevents us from having to lock during the entire mdns browse time.
 	for k, v := range mdnsHosts {
@@ -184,8 +166,12 @@ func (m *MDNS) BrowseMDNS() {
 	for k, v := range srvHosts {
 		(*m.srvHosts)[k] = v
 	}
+	for k, v := range cnames {
+		(*m.cnames)[k] = v
+	}
 	log.Debug(m.mdnsHosts)
 	log.Debug(m.srvHosts)
+	log.Debug(m.cnames)
 }
 
 func (m MDNS) Name() string { return "mdns" }
