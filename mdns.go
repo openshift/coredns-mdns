@@ -39,10 +39,14 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 	// provides common code for doing so.
 	answerEntry, present := hosts[name]
 	if present {
-		aheader := dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrV4})
-		aaaaheader := dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
-		msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+		if answerEntry.AddrV4 != nil {
+			aheader := dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
+			msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrV4})
+		}
+		if answerEntry.AddrV6 != nil {
+			aaaaheader := dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
+			msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+		}
 		return true
 	}
 	return false
