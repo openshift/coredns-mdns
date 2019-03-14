@@ -1,9 +1,9 @@
 FROM registry.svc.ci.openshift.org/openshift/release:golang-1.11 AS builder
-WORKDIR /go/src/github.com/metalkube/coredns-mdns
+WORKDIR /go/src/github.com/openshift-metalkube/coredns-mdns
 COPY . .
 RUN git clone https://github.com/coredns/coredns /go/src/github.com/coredns/coredns
 WORKDIR /go/src/github.com/coredns/coredns
-RUN git clone https://github.com/metalkube/coredns /root/coredns
+RUN git clone https://github.com/openshift-metalkube/coredns /root/coredns
 RUN git apply /root/coredns/mdns.patch && \
     make
 
