@@ -1,0 +1,22 @@
+diff --git a/go.mod b/go.mod
+index 239b4cec..aa47a057 100644
+--- a/go.mod
++++ b/go.mod
+@@ -83,3 +83,4 @@ require (
+ )
+ 
+ replace github.com/DataDog/dd-trace-go v0.6.1 => github.com/datadog/dd-trace-go v0.6.1
++replace github.com/openshift-metalkube/coredns-mdns => /go/src/github.com/openshift-metalkube/coredns-mdns/
+diff --git a/plugin.cfg b/plugin.cfg
+index a9450d50..9e7fb6ed 100644
+--- a/plugin.cfg
++++ b/plugin.cfg
+@@ -37,6 +37,8 @@ dnstap:dnstap
+ chaos:chaos
+ loadbalance:loadbalance
+ cache:cache
++mdns:github.com/openshift-metalkube/coredns-mdns
++machinekubernetes:github.com/openshift-metalkube/coredns-machine-kubernetes
+ rewrite:rewrite
+ dnssec:dnssec
+ autopath:autopath

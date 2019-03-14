@@ -3,9 +3,8 @@ WORKDIR /go/src/github.com/openshift-metalkube/coredns-mdns
 COPY . .
 RUN git clone https://github.com/coredns/coredns /go/src/github.com/coredns/coredns
 WORKDIR /go/src/github.com/coredns/coredns
-RUN git clone https://github.com/openshift-metalkube/coredns /root/coredns
-RUN git apply /root/coredns/mdns.patch && \
-    make
+RUN git apply /go/src/github.com/openshift-metalkube/coredns-mdns/containerization/mdns_machine.patch
+RUN make
 
 FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
 COPY --from=builder /go/src/github.com/coredns/coredns/coredns /usr/bin/
