@@ -19,12 +19,12 @@ import (
 var log = clog.NewWithPlugin("mdns")
 
 type MDNS struct {
-	Next   plugin.Handler
-	Domain string
-	mutex *sync.RWMutex
+	Next      plugin.Handler
+	Domain    string
+	mutex     *sync.RWMutex
 	mdnsHosts *map[string]*mdns.ServiceEntry
-	srvHosts *map[string][]*mdns.ServiceEntry
-	cnames *map[string]string
+	srvHosts  *map[string][]*mdns.ServiceEntry
+	cnames    *map[string]string
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -70,7 +70,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	srvHosts := *m.srvHosts
 	cnames := *m.cnames
 
-	if !strings.HasSuffix(state.QName(), m.Domain + ".") {
+	if !strings.HasSuffix(state.QName(), m.Domain+".") {
 		log.Debug("Skipping due to query not in our domain")
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
