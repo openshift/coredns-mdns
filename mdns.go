@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -120,6 +121,20 @@ func (m *MDNS) BrowseMDNS() {
 	mdnsHosts := make(map[string]*mdns.ServiceEntry)
 	srvHosts := make(map[string][]*mdns.ServiceEntry)
 	cnames := make(map[string]string)
+
+	// Populate static SRV and CNAME records for bootstrap. We can't rely on getting
+	// these dynamically because when one node comes up before the others it may get
+	// an incomplete SRV list and create a bogus cluster.
+	for i := 0; i < 3; i++ {
+		fqDomain := "." + m.Domain + "."
+		index := strconv.Itoa(i)
+		etcd := "etcd-" + index + fqDomain
+		cnames[etcd] = "master-" + index + fqDomain
+		srvEntry := mdns.ServiceEntry{Host: etcd, Port: 2380}
+		srvName := "_etcd-server-ssl._tcp" + fqDomain
+		srvHosts[srvName] = append(srvHosts[srvName], &srvEntry)
+	}
+
 	go func() {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
@@ -146,7 +161,17 @@ func (m *MDNS) BrowseMDNS() {
 			cname := "etcd-" + GetIndex(localEntry.Host) + "." + m.Domain + "."
 			localEntry.Host = cname
 			cnames[cname] = hostCustomDomain
-			srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
+			// Don't add duplicate SRV records
+			found := false
+			for _, host := range srvHosts[srvName] {
+				if host.Host == cname {
+					found = true
+					break
+				}
+			}
+			if ! found {
+				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
+			}
 		}
 	}()
 
