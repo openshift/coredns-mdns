@@ -172,7 +172,10 @@ func (m *MDNS) BrowseMDNS() {
 		(*m.mdnsHosts)[k] = v
 	}
 	for k, v := range srvHosts {
-		(*m.srvHosts)[k] = v
+		// Hax!
+		if len(v) >= 3 {
+			(*m.srvHosts)[k] = v
+		}
 	}
 	for k, v := range cnames {
 		(*m.cnames)[k] = v
