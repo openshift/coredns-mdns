@@ -1,6 +1,9 @@
 package mdns
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +26,15 @@ func setup(c *caddy.Controller) error {
 	c.Next()
 	c.NextArg()
 	domain := c.Val()
+	minSRV := 3
+	if c.NextArg() {
+		val, err := strconv.Atoi(c.Val())
+		if err != nil {
+			text := fmt.Sprintf("Invalid minSRV: %s", err)
+			return plugin.Error("mdns", errors.New(text))
+		}
+		minSRV = val
+	}
 	if c.NextArg() {
 		return plugin.Error("mdns", c.ArgErr())
 	}
@@ -33,7 +45,7 @@ func setup(c *caddy.Controller) error {
 	srvHosts := make(map[string][]*mdns.ServiceEntry)
 	cnames := make(map[string]string)
 	mutex := sync.RWMutex{}
-	m := MDNS{Domain: strings.TrimSuffix(domain, "."), mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
+	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)

@@ -21,6 +21,7 @@ var log = clog.NewWithPlugin("mdns")
 type MDNS struct {
 	Next      plugin.Handler
 	Domain    string
+	minSRV    int
 	mutex     *sync.RWMutex
 	mdnsHosts *map[string]*mdns.ServiceEntry
 	srvHosts  *map[string][]*mdns.ServiceEntry
@@ -172,8 +173,9 @@ func (m *MDNS) BrowseMDNS() {
 		(*m.mdnsHosts)[k] = v
 	}
 	for k, v := range srvHosts {
-		// Hax!
-		if len(v) >= 3 {
+		// Don't return any SRV records until we have enough of them. Returning
+		// partial SRV lists can result in bad clustering.
+		if len(v) >= m.minSRV {
 			(*m.srvHosts)[k] = v
 		}
 	}
