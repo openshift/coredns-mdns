@@ -30,7 +30,6 @@ type MDNS struct {
 	mutex       *sync.RWMutex
 	mdnsHosts   *map[string]*zeroconf.ServiceEntry
 	srvHosts    *map[string][]*zeroconf.ServiceEntry
-	cnames      *map[string]string
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -59,13 +58,6 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 	return false
 }
 
-// Return the node index from a hostname.
-// For example, the return value from "master-0.ostest.test.metal3.io" would be "0"
-func GetIndex(host string) string {
-	shortname := strings.Split(host, ".")[0]
-	return shortname[strings.LastIndex(shortname, "-")+1:]
-}
-
 func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 
 	log.Debug("Received query")
@@ -78,14 +70,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	// Just for convenience so we don't have to keep dereferencing these
 	mdnsHosts := *m.mdnsHosts
 	srvHosts := *m.srvHosts
-	cnames := *m.cnames
 
 	if !strings.HasSuffix(state.QName(), m.Domain+".") {
 		log.Debugf("Skipping due to query '%s' not in our domain '%s'", state.QName(), m.Domain)
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
-	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
+	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV {
 		log.Debugf("Skipping due to unrecognized query type %v", state.QType())
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
@@ -96,16 +87,6 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	defer m.mutex.RUnlock()
 
 	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
-	}
-
-	cnameTarget, present := cnames[state.Name()]
-	if present {
-		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
-		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
-		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
 		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
@@ -130,7 +111,6 @@ func (m *MDNS) BrowseMDNS() {
 	srvEntriesCh := make(chan *zeroconf.ServiceEntry)
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
 	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
-	cnames := make(map[string]string)
 	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range results {
@@ -189,9 +169,6 @@ func (m *MDNS) BrowseMDNS() {
 	for k := range *m.srvHosts {
 		delete(*m.srvHosts, k)
 	}
-	for k := range *m.cnames {
-		delete(*m.cnames, k)
-	}
 	// Copy values into the shared maps only after we've collected all of them.
 	// This prevents us from having to lock during the entire mdns browse time.
 	for k, v := range mdnsHosts {
@@ -204,9 +181,6 @@ func (m *MDNS) BrowseMDNS() {
 			(*m.srvHosts)[k] = v
 		}
 	}
-	for k, v := range cnames {
-		(*m.cnames)[k] = v
-	}
 	log.Infof("mdnsHosts: %v", m.mdnsHosts)
 	for name, entry := range *m.mdnsHosts {
 		log.Debugf("%s: %v", name, entry)
@@ -217,7 +191,6 @@ func (m *MDNS) BrowseMDNS() {
 			log.Debugf("%s: %v", name, v)
 		}
 	}
-	log.Debugf("cnames: %v", m.cnames)
 }
 
 func queryService(service string, channel chan *zeroconf.ServiceEntry, iface net.Interface, z ZeroconfInterface) error {

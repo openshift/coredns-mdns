@@ -52,9 +52,8 @@ func setup(c *caddy.Controller) error {
 	// pointers so all copies of the plugin point at the same maps.
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
 	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
-	cnames := make(map[string]string)
 	mutex := sync.RWMutex{}
-	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, bindAddress: bindAddress, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
+	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, bindAddress: bindAddress, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
