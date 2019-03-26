@@ -22,6 +22,7 @@ type MDNS struct {
 	Next      plugin.Handler
 	Domain    string
 	minSRV    int
+	filter    string
 	mutex     *sync.RWMutex
 	mdnsHosts *map[string]*mdns.ServiceEntry
 	srvHosts  *map[string][]*mdns.ServiceEntry
@@ -127,12 +128,17 @@ func (m *MDNS) BrowseMDNS() {
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
 			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
-			// Hacky - coerce .local to our domain
-			// I was having trouble using domains other than .local. Need further investigation.
-			// After further investigation, maybe this is working as intended:
-			// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
-			hostCustomDomain := m.ReplaceLocal(localEntry.Host)
-			mdnsHosts[hostCustomDomain] = entry
+			if strings.Contains(localEntry.Name, m.filter) {
+				// Hacky - coerce .local to our domain
+				// I was having trouble using domains other than .local. Need further investigation.
+				// After further investigation, maybe this is working as intended:
+				// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
+				hostCustomDomain := m.ReplaceLocal(localEntry.Host)
+				mdnsHosts[hostCustomDomain] = entry
+			} else {
+				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
+						   localEntry.Name, m.filter)
+			}
 		}
 	}()
 
@@ -142,12 +148,17 @@ func (m *MDNS) BrowseMDNS() {
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
 			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
-			hostCustomDomain := m.ReplaceLocal(localEntry.Host)
-			srvName := strings.SplitN(m.ReplaceLocal(localEntry.Name), ".", 2)[1]
-			cname := "etcd-" + GetIndex(localEntry.Host) + "." + m.Domain + "."
-			localEntry.Host = cname
-			cnames[cname] = hostCustomDomain
-			srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
+			if strings.Contains(localEntry.Name, m.filter) {
+				hostCustomDomain := m.ReplaceLocal(localEntry.Host)
+				srvName := strings.SplitN(m.ReplaceLocal(localEntry.Name), ".", 2)[1]
+				cname := "etcd-" + GetIndex(localEntry.Host) + "." + m.Domain + "."
+				localEntry.Host = cname
+				cnames[cname] = hostCustomDomain
+				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
+			} else {
+				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
+						   localEntry.Name, m.filter)
+			}
 		}
 	}()
 
