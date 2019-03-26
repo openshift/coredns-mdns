@@ -28,6 +28,8 @@ func setup(c *caddy.Controller) error {
 	c.NextArg()
 	domain := c.Val()
 	minSRV := 3
+	// Note that a filter of "" will match everything
+	filter := ""
 	if c.NextArg() {
 		val, err := strconv.Atoi(c.Val())
 		if err != nil {
@@ -35,6 +37,9 @@ func setup(c *caddy.Controller) error {
 			return plugin.Error("mdns", errors.New(text))
 		}
 		minSRV = val
+	}
+	if c.NextArg() {
+		filter = c.Val()
 	}
 	if c.NextArg() {
 		return plugin.Error("mdns", c.ArgErr())
@@ -46,7 +51,7 @@ func setup(c *caddy.Controller) error {
 	srvHosts := make(map[string][]*mdns.ServiceEntry)
 	cnames := make(map[string]string)
 	mutex := sync.RWMutex{}
-	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
+	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
 
 	c.OnStartup(func() error {
 		// mdns is quite noisy, and we don't really care about any of its messages
