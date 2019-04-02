@@ -127,6 +127,10 @@ func (m *MDNS) BrowseMDNS() {
 	go func() {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range entriesCh {
+			if ! strings.Contains(entry.Name, "_workstation._tcp") {
+				log.Debugf("Ignoring A entry '%s' which has wrong type", entry.Name)
+				continue
+			}
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
 			log.Debugf("A Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
@@ -147,6 +151,10 @@ func (m *MDNS) BrowseMDNS() {
 	go func() {
 		log.Debug("Retrieving SRV mDNS entries")
 		for entry := range srvEntriesCh {
+			if ! strings.Contains(entry.Name, "_etcd-server-ssl._tcp") {
+				log.Debugf("Ignoring SRV entry '%s' which has wrong type", entry.Name)
+				continue
+			}
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
 			log.Debugf("SRV Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
