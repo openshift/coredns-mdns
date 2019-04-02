@@ -67,18 +67,19 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg := new(dns.Msg)
 	msg.SetReply(r)
 	state := request.Request{W: w, Req: r}
+	log.Debugf("Looking for name: %s", state.QName())
 	// Just for convenience so we don't have to keep dereferencing these
 	mdnsHosts := *m.mdnsHosts
 	srvHosts := *m.srvHosts
 	cnames := *m.cnames
 
 	if !strings.HasSuffix(state.QName(), m.Domain+".") {
-		log.Debug("Skipping due to query not in our domain")
+		log.Debugf("Skipping due to query '%s' not in our domain '%s'", state.QName(), m.Domain)
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
 	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
-		log.Debug("Skipping due to unrecognized query type")
+		log.Debugf("Skipping due to unrecognized query type %v", state.QType())
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
@@ -113,6 +114,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
+	log.Debugf("No records found for '%s', forwarding to next plugin.", state.QName())
 	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 }
 
@@ -127,7 +129,7 @@ func (m *MDNS) BrowseMDNS() {
 		for entry := range entriesCh {
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
-			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
+			log.Debugf("A Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
 			if strings.Contains(localEntry.Name, m.filter) {
 				// Hacky - coerce .local to our domain
 				// I was having trouble using domains other than .local. Need further investigation.
@@ -147,7 +149,7 @@ func (m *MDNS) BrowseMDNS() {
 		for entry := range srvEntriesCh {
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
-			log.Debugf("Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
+			log.Debugf("SRV Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
 			if strings.Contains(localEntry.Name, m.filter) {
 				hostCustomDomain := m.ReplaceLocal(localEntry.Host)
 				srvName := strings.SplitN(m.ReplaceLocal(localEntry.Name), ".", 2)[1]
