@@ -10,9 +10,8 @@ import (
 
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
-	clog "github.com/coredns/coredns/plugin/pkg/log"
 
-	"github.com/whyrusleeping/mdns"
+	"github.com/grandcat/zeroconf"
 	"github.com/mholt/caddy"
 )
 
@@ -47,17 +46,13 @@ func setup(c *caddy.Controller) error {
 
 	// Because the plugin interface uses a value receiver, we need to make these
 	// pointers so all copies of the plugin point at the same maps.
-	mdnsHosts := make(map[string]*mdns.ServiceEntry)
-	srvHosts := make(map[string][]*mdns.ServiceEntry)
+	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
+	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 	cnames := make(map[string]string)
 	mutex := sync.RWMutex{}
 	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
 
 	c.OnStartup(func() error {
-		// mdns is quite noisy, and we don't really care about any of its messages
-		if ! clog.D {
-			mdns.DisableLogging = true
-		}
 		go browseLoop(&m)
 		return nil
 	})
