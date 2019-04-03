@@ -6,12 +6,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coredns/coredns/plugin"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 
-	"github.com/whyrusleeping/mdns"
+	"github.com/grandcat/zeroconf"
 	"github.com/miekg/dns"
 	"golang.org/x/net/context"
 )
@@ -24,8 +25,8 @@ type MDNS struct {
 	minSRV    int
 	filter    string
 	mutex     *sync.RWMutex
-	mdnsHosts *map[string]*mdns.ServiceEntry
-	srvHosts  *map[string][]*mdns.ServiceEntry
+	mdnsHosts *map[string]*zeroconf.ServiceEntry
+	srvHosts  *map[string][]*zeroconf.ServiceEntry
 	cnames    *map[string]string
 }
 
@@ -35,19 +36,20 @@ func (m MDNS) ReplaceLocal(input string) string {
 	return input[0:len(input)-7] + fqDomain
 }
 
-func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*mdns.ServiceEntry, name string) bool {
+func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*zeroconf.ServiceEntry, name string) bool {
 	// Add A and AAAA record for name (if it exists) to msg.
 	// A records need to be returned in both A and CNAME queries, this function
 	// provides common code for doing so.
 	answerEntry, present := hosts[name]
 	if present {
-		if answerEntry.AddrV4 != nil {
+		if answerEntry.AddrIPv4 != nil {
 			aheader := dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
-			msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrV4})
+			// TODO: Support multiple addresses
+			msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrIPv4[0]})
 		}
-		if answerEntry.AddrV6 != nil {
+		if answerEntry.AddrIPv6 != nil {
 			aaaaheader := dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
-			msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrV6})
+			msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrIPv6[0]})
 		}
 		return true
 	}
@@ -108,7 +110,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	if present {
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 0}
 		for _, host := range srvEntry {
-			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.Host, Priority: 0, Weight: 10, Port: uint16(host.Port)})
+			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.HostName, Priority: 0, Weight: 10, Port: uint16(host.Port)})
 		}
 		log.Debug(msg)
 		w.WriteMsg(msg)
@@ -119,55 +121,80 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 }
 
 func (m *MDNS) BrowseMDNS() {
-	entriesCh := make(chan *mdns.ServiceEntry, 4)
-	srvEntriesCh := make(chan *mdns.ServiceEntry, 4)
-	mdnsHosts := make(map[string]*mdns.ServiceEntry)
-	srvHosts := make(map[string][]*mdns.ServiceEntry)
+	entriesCh := make(chan *zeroconf.ServiceEntry)
+	srvEntriesCh := make(chan *zeroconf.ServiceEntry)
+	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
+	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 	cnames := make(map[string]string)
-	go func() {
+	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving mDNS entries")
-		for entry := range entriesCh {
-			// Make a copy of the entry so mdns can't later overwrite our changes
+		for entry := range results {
+			// Make a copy of the entry so zeroconf can't later overwrite our changes
 			localEntry := *entry
-			log.Debugf("A Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
-			if strings.Contains(localEntry.Name, m.filter) {
+			log.Debugf("A Instance: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
+			if strings.Contains(localEntry.Instance, m.filter) {
 				// Hacky - coerce .local to our domain
 				// I was having trouble using domains other than .local. Need further investigation.
 				// After further investigation, maybe this is working as intended:
 				// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
-				hostCustomDomain := m.ReplaceLocal(localEntry.Host)
+				hostCustomDomain := m.ReplaceLocal(localEntry.HostName)
 				mdnsHosts[hostCustomDomain] = entry
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-						   localEntry.Name, m.filter)
+						   localEntry.Instance, m.filter)
 			}
 		}
-	}()
+	}(entriesCh)
 
-	go func() {
+	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving SRV mDNS entries")
-		for entry := range srvEntriesCh {
+		for entry := range results {
 			// Make a copy of the entry so mdns can't later overwrite our changes
 			localEntry := *entry
-			log.Debugf("SRV Name: %s, Host: %s, AddrV4: %s, AddrV6: %s\n", localEntry.Name, localEntry.Host, localEntry.AddrV4, localEntry.AddrV6)
-			if strings.Contains(localEntry.Name, m.filter) {
-				hostCustomDomain := m.ReplaceLocal(localEntry.Host)
-				srvName := strings.SplitN(m.ReplaceLocal(localEntry.Name), ".", 2)[1]
-				cname := "etcd-" + GetIndex(localEntry.Host) + "." + m.Domain + "."
-				localEntry.Host = cname
+			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
+			if strings.Contains(localEntry.Instance, m.filter) {
+				hostCustomDomain := m.ReplaceLocal(localEntry.HostName)
+				srvName := localEntry.Service + "." + m.Domain + "."
+				cname := "etcd-" + GetIndex(localEntry.HostName) + "." + m.Domain + "."
+				localEntry.HostName = cname
 				cnames[cname] = hostCustomDomain
 				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-						   localEntry.Name, m.filter)
+						   localEntry.Instance, m.filter)
 			}
 		}
-	}()
+	}(srvEntriesCh)
 
-	mdns.Lookup("_workstation._tcp", entriesCh)
-	close(entriesCh)
-	mdns.Lookup("_etcd-server-ssl._tcp", srvEntriesCh)
-	close(srvEntriesCh)
+	resolver, err := zeroconf.NewResolver(nil)
+	if err != nil {
+		log.Errorf("Failed to initialize A resolver: %s", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = resolver.Browse(ctx, "_workstation._tcp", "local.", entriesCh)
+	if err != nil {
+		log.Errorf("Failed to browse A records: %s", err.Error())
+		return
+	}
+	<-ctx.Done()
+
+	resolver, err = zeroconf.NewResolver(nil)
+	if err != nil {
+		log.Errorf("Failed to initialize SRV resolver: %s", err.Error())
+		return
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = resolver.Browse(ctx, "_etcd-server-ssl._tcp", "local.", srvEntriesCh)
+	if err != nil {
+		log.Errorf("Failed to browse SRV records: %s", err.Error())
+		return
+	}
+	<-ctx.Done()
+
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	// Clear maps so we don't have stale entries
