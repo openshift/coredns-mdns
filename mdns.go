@@ -69,6 +69,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg := new(dns.Msg)
 	msg.SetReply(r)
 	msg.Authoritative = true
+	msg.RecursionAvailable = true
 	state := request.Request{W: w, Req: r}
 	log.Debugf("Looking for name: %s", state.QName())
 	// Just for convenience so we don't have to keep dereferencing these
