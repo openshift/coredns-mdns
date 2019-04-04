@@ -168,34 +168,8 @@ func (m *MDNS) BrowseMDNS() {
 		}
 	}(srvEntriesCh)
 
-	resolver, err := zeroconf.NewResolver(nil)
-	if err != nil {
-		log.Errorf("Failed to initialize A resolver: %s", err.Error())
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err = resolver.Browse(ctx, "_workstation._tcp", "local.", entriesCh)
-	if err != nil {
-		log.Errorf("Failed to browse A records: %s", err.Error())
-		return
-	}
-	<-ctx.Done()
-
-	resolver, err = zeroconf.NewResolver(nil)
-	if err != nil {
-		log.Errorf("Failed to initialize SRV resolver: %s", err.Error())
-		return
-	}
-
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err = resolver.Browse(ctx, "_etcd-server-ssl._tcp", "local.", srvEntriesCh)
-	if err != nil {
-		log.Errorf("Failed to browse SRV records: %s", err.Error())
-		return
-	}
-	<-ctx.Done()
+	queryService("_workstation._tcp", entriesCh)
+	queryService("_etcd-server-ssl._tcp", srvEntriesCh)
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -235,6 +209,22 @@ func (m *MDNS) BrowseMDNS() {
 		}
 	}
 	log.Debugf("cnames: %v", m.cnames)
+}
+
+func queryService(service string, channel chan *zeroconf.ServiceEntry) {
+	resolver, err := zeroconf.NewResolver(nil)
+	if err != nil {
+		log.Errorf("Failed to initialize %s resolver: %s", service, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = resolver.Browse(ctx, service, "local.", channel)
+	if err != nil {
+		log.Errorf("Failed to browse %s records: %s", service, err.Error())
+		return
+	}
+	<-ctx.Done()
 }
 
 func (m MDNS) Name() string { return "mdns" }
