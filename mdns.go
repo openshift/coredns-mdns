@@ -57,7 +57,7 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 }
 
 // Return the node index from a hostname.
-// For example, the return value from "master-0.ostest.test.metalkube.org" would be "0"
+// For example, the return value from "master-0.ostest.test.metal3.io" would be "0"
 func GetIndex(host string) string {
 	shortname := strings.Split(host, ".")[0]
 	return shortname[strings.LastIndex(shortname, "-")+1:]
@@ -143,7 +143,7 @@ func (m *MDNS) BrowseMDNS() {
 				mdnsHosts[hostCustomDomain] = entry
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-						   localEntry.Instance, m.filter)
+					localEntry.Instance, m.filter)
 			}
 		}
 	}(entriesCh)
@@ -163,7 +163,7 @@ func (m *MDNS) BrowseMDNS() {
 				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-						   localEntry.Instance, m.filter)
+					localEntry.Instance, m.filter)
 			}
 		}
 	}(srvEntriesCh)
@@ -225,11 +225,11 @@ func (m *MDNS) BrowseMDNS() {
 		(*m.cnames)[k] = v
 	}
 	log.Debugf("mdnsHosts: %v", m.mdnsHosts)
-	for name, entry := range (*m.mdnsHosts) {
+	for name, entry := range *m.mdnsHosts {
 		log.Debugf("%s: %s", name, entry)
 	}
 	log.Debugf("srvHosts: %v", m.srvHosts)
-	for name, records := range (*m.srvHosts) {
+	for name, records := range *m.srvHosts {
 		for _, v := range records {
 			log.Debugf("%s: %s", name, v)
 		}

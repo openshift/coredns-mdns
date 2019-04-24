@@ -1,4 +1,4 @@
-module github.com/openshift-metalkube/coredns-mdns
+module github.com/openshift-metal3/coredns-mdns
 
 require (
 	github.com/coredns/coredns v1.4.0
