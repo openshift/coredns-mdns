@@ -12,7 +12,7 @@ import (
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 
-	"github.com/grandcat/zeroconf"
+	"github.com/celebdor/zeroconf"
 	"github.com/miekg/dns"
 	"golang.org/x/net/context"
 )
