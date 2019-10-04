@@ -7,3 +7,5 @@ require (
 	github.com/miekg/dns v1.1.14
 	golang.org/x/net v0.0.0-20190619014844-b5b0513f8c1b
 )
+
+go 1.13
