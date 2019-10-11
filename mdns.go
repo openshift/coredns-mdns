@@ -42,12 +42,12 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 	// provides common code for doing so.
 	answerEntry, present := hosts[name]
 	if present {
-		if answerEntry.AddrIPv4 != nil {
+		if answerEntry.AddrIPv4[0] != nil {
 			aheader := dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}
 			// TODO: Support multiple addresses
 			msg.Answer = append(msg.Answer, &dns.A{Hdr: aheader, A: answerEntry.AddrIPv4[0]})
 		}
-		if answerEntry.AddrIPv6 != nil {
+		if answerEntry.AddrIPv6[0] != nil {
 			aaaaheader := dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 60}
 			msg.Answer = append(msg.Answer, &dns.AAAA{Hdr: aaaaheader, AAAA: answerEntry.AddrIPv6[0]})
 		}
