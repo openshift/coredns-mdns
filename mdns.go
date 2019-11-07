@@ -200,12 +200,12 @@ func (m *MDNS) BrowseMDNS() {
 	}
 	log.Debugf("mdnsHosts: %v", m.mdnsHosts)
 	for name, entry := range *m.mdnsHosts {
-		log.Debugf("%s: %s", name, entry)
+		log.Debugf("%s: %v", name, entry)
 	}
 	log.Debugf("srvHosts: %v", m.srvHosts)
 	for name, records := range *m.srvHosts {
 		for _, v := range records {
-			log.Debugf("%s: %s", name, v)
+			log.Debugf("%s: %v", name, v)
 		}
 	}
 	log.Debugf("cnames: %v", m.cnames)
