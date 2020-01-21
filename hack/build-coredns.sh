@@ -27,9 +27,12 @@ fi
 mkdir -p $GOPATH/src/github.com/coredns
 source_dir=$(readlink -f "$(dirname "$0")/..")
 
+export COREDNS_REPO="${COREDNS_REPO:-https://github.com/openshift/coredns}"
+export COREDNS_BRANCH="${COREDNS_BRANCH:-master}"
 cd $GOPATH/src/github.com/coredns
-git clone https://github.com/openshift/coredns
+git clone ${COREDNS_REPO}
 cd coredns
+git checkout ${COREDNS_BRANCH}
 # Make coredns use our local source
 echo "replace github.com/openshift/coredns-mdns => $source_dir" >> "$GOPATH/src/github.com/coredns/coredns/go.mod"
 GO111MODULE=on GOFLAGS=-mod=vendor go build -o coredns .
