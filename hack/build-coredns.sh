@@ -13,6 +13,8 @@
 
 set -ex -o pipefail
 
+CONTAINER_IMAGE=${CONTAINER_IMAGE:-}
+
 export GOPATH="${1:-$(mktemp -d)}"
 if [ -z "${1:-}" ]
 then
@@ -33,5 +35,10 @@ git checkout ${COREDNS_BRANCH}
 # Make coredns use our local source
 rm vendor/github.com/openshift/coredns-mdns/*
 cp $source_dir/*.go vendor/github.com/openshift/coredns-mdns
-GO111MODULE=on GOFLAGS=-mod=vendor go build -o coredns .
-cp coredns "$source_dir"
+if [ -z "$CONTAINER_IMAGE" ]
+then
+    GO111MODULE=on GOFLAGS=-mod=vendor go build -o coredns .
+    cp coredns "$source_dir"
+else
+    podman build -t "$CONTAINER_IMAGE" -f Dockerfile.openshift .
+fi
