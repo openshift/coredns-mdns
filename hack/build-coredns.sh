@@ -33,8 +33,8 @@ fi
 cd coredns
 git checkout ${COREDNS_BRANCH}
 # Make coredns use our local source
-rm vendor/github.com/openshift/coredns-mdns/*
-cp $source_dir/*.go vendor/github.com/openshift/coredns-mdns
+GO111MODULE=on go mod edit -replace github.com/openshift/coredns-mdns=$source_dir
+GO111MODULE=on go mod vendor
 if [ -z "$CONTAINER_IMAGE" ]
 then
     GO111MODULE=on GOFLAGS=-mod=vendor go build -o coredns .
