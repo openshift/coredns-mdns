@@ -198,7 +198,7 @@ func (m *MDNS) BrowseMDNS() {
 	for k, v := range cnames {
 		(*m.cnames)[k] = v
 	}
-	log.Debugf("mdnsHosts: %v", m.mdnsHosts)
+	log.Infof("mdnsHosts: %v", m.mdnsHosts)
 	for name, entry := range *m.mdnsHosts {
 		log.Debugf("%s: %v", name, entry)
 	}
