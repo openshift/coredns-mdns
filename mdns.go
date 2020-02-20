@@ -155,11 +155,8 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				hostCustomDomain := m.ReplaceLocal(localEntry.HostName)
+				localEntry.HostName = m.ReplaceLocal(localEntry.HostName)
 				srvName := localEntry.Service + "." + m.Domain + "."
-				cname := "etcd-" + GetIndex(localEntry.HostName) + "." + m.Domain + "."
-				localEntry.HostName = cname
-				cnames[cname] = hostCustomDomain
 				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
