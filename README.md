@@ -44,7 +44,7 @@ until it has at least that many SRV records before responding with any of them.
 `minimum SRV records` defaults to `1`.
 
 ~~~ corefile
-example.com {
+.local {
     mdns 2
 }
 ~~~
@@ -60,7 +60,7 @@ advertised that are not intended for use with it. When `filter text` is not
 set, all records will be processed.
 
 ~~~ corefile
-example.com {
+.local {
     mdns 3 my-id
 }
 ~~~
