@@ -1,10 +1,6 @@
 package mdns
 
 import (
-	"errors"
-	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +8,7 @@ import (
 	"github.com/coredns/coredns/plugin"
 
 	"github.com/caddyserver/caddy"
-	"github.com/celebdor/zeroconf"
+	"github.com/grandcat/zeroconf"
 )
 
 func init() {
