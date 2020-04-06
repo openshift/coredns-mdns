@@ -71,7 +71,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	}
 
 	msg.Answer = []dns.RR{}
-	hostName := strings.ToLower(state.QName)
+	hostName := strings.ToLower(state.QName())
 
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
