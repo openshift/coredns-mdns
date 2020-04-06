@@ -13,21 +13,19 @@ accessible through a standard DNS server.
 ## Syntax
 
 ~~~
-mdns example.com [minimum SRV records] [filter text]
+mdns [minimum SRV records] [filter text]
 ~~~
 
 ## Examples
 
 As a prerequisite to using this plugin, there must be systems on the local
-network broadcasting mDNS records. Note that the .local domain will be
-replaced with the configured domain. For example, `test.local` would become
-`test.example.com` using the configuration below.
+network broadcasting mDNS records. 
 
 Specify the domain for the records.
 
 ~~~ corefile
-example.com {
-	mdns example.com
+.local {
+	mdns
 }
 ~~~
 
@@ -43,11 +41,11 @@ baremetal-test-extra-1.example.com. 60 IN AAAA fe80::f816:3eff:fe49:19b3
 
 If `minimum SRV records` is specified in the configuration, the plugin will wait
 until it has at least that many SRV records before responding with any of them.
-`minimum SRV records` defaults to `3`.
+`minimum SRV records` defaults to `1`.
 
 ~~~ corefile
 example.com {
-    mdns example.com 2
+    mdns 2
 }
 ~~~
 
@@ -63,7 +61,7 @@ set, all records will be processed.
 
 ~~~ corefile
 example.com {
-    mdns example.com 3 my-id
+    mdns 3 my-id
 }
 ~~~
 

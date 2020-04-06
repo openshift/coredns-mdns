@@ -25,8 +25,7 @@ func init() {
 func setup(c *caddy.Controller) error {
 	c.Next()
 	c.NextArg()
-	domain := c.Val()
-	minSRV := 3
+	minSRV := 1
 	// Note that a filter of "" will match everything
 	filter := ""
 	if c.NextArg() {
@@ -49,7 +48,7 @@ func setup(c *caddy.Controller) error {
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
 	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 	mutex := sync.RWMutex{}
-	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
+	m := MDNS{minSRV: minSRV, filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
@@ -69,6 +68,6 @@ func browseLoop(m *MDNS) {
 		m.BrowseMDNS()
 		// 5 seconds seems to be the minimum ttl that the cache plugin will allow
 		// Since each browse operation takes around 2 seconds, this should be fine
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
