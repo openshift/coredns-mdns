@@ -123,8 +123,7 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				srvName := localEntry.Service + ".local."
-				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
+				srvHosts[localEntry.HostName] = append(srvHosts[localEntry.HostName], &localEntry)
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
 					localEntry.Instance, m.filter)
@@ -133,7 +132,7 @@ func (m *MDNS) BrowseMDNS() {
 	}(srvEntriesCh)
 
 	queryService("_workstation._tcp", entriesCh)
-	queryService("_etcd-server-ssl._tcp", srvEntriesCh)
+	//queryService("_etcd-server-ssl._tcp", srvEntriesCh)
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
