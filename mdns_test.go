@@ -42,7 +42,7 @@ func TestAddARecord(t *testing.T) {
 	}{
 		{"valid local ipv4", "mymachine.local", net.ParseIP("10.1.1.1"), nilResponseWriter{}, map[string]*zeroconf.ServiceEntry{"mymachine.local": ipv4}, "mymachine.local	60	IN	A	10.1.1.1", true},
 		{"valid local ipv6", "mymachine.local", net.ParseIP("2001::1"), nilResponseWriter{}, map[string]*zeroconf.ServiceEntry{"mymachine.local": ipv6}, "mymachine.local	60	IN	AAAA	2001::1", true},
-		{"local not found", "mymachine.local", net.ParseIP("10.1.1.1"), nilResponseWriter{}, map[string]*zeroconf.ServiceEntry{"mymachine.local": ipv4}, "", false},
+		{"local not found", "whatever.local", net.ParseIP("10.1.1.1"), nilResponseWriter{}, map[string]*zeroconf.ServiceEntry{"mymachine.local": ipv4}, "", false},
 	}
 	for _, tc := range testCases {
 		hosts := tc.hosts
