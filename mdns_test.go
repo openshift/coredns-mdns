@@ -48,7 +48,7 @@ func TestAddARecord(t *testing.T) {
 		hosts := tc.hosts
 		srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 		mutex := sync.RWMutex{}
-		m := MDNS{nil, 0, "", &mutex, &hosts, &srvHosts}
+		m := MDNS{nil, "", &mutex, &hosts, &srvHosts}
 		msg := new(dns.Msg)
 		reply := new(dns.Msg)
 		msg.SetReply(reply)
