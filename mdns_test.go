@@ -10,7 +10,7 @@ import (
 	"github.com/miekg/dns"
 )
 
-func makeServiceEntry(name, ip net.IP) *zeroconf.ServiceEntry {
+func makeServiceEntry(name string, ip net.IP) *zeroconf.ServiceEntry {
 	var ipAddrv4, ipAddrv6 []net.IP
 	if ip.To4() != nil {
 		ipAddrv4 = append(ipAddrv4, ip)
