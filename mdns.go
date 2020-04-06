@@ -12,7 +12,7 @@ import (
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 
-	"github.com/celebdor/zeroconf"
+	"github.com/grandcat/zeroconf"
 	"github.com/miekg/dns"
 	"golang.org/x/net/context"
 )
@@ -21,7 +21,6 @@ var log = clog.NewWithPlugin("mdns")
 
 type MDNS struct {
 	Next      plugin.Handler
-	Domain    string
 	minSRV    int
 	filter    string
 	mutex     *sync.RWMutex
@@ -29,15 +28,9 @@ type MDNS struct {
 	srvHosts  *map[string][]*zeroconf.ServiceEntry
 }
 
-func (m MDNS) ReplaceLocal(input string) string {
-	// Replace .local domain with our configured custom domain
-	fqDomain := "." + strings.TrimSuffix(m.Domain, ".") + "."
-	return input[0:len(input)-7] + fqDomain
-}
-
 func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*zeroconf.ServiceEntry, name string) bool {
 	// Add A and AAAA record for name (if it exists) to msg.
-	// A records need to be returned in both A and CNAME queries, this function
+	// A records need to be returned in A queries, this function
 	// provides common code for doing so.
 	answerEntry, present := hosts[name]
 	if present {
@@ -68,8 +61,8 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	mdnsHosts := *m.mdnsHosts
 	srvHosts := *m.srvHosts
 
-	if !strings.HasSuffix(state.QName(), m.Domain+".") {
-		log.Debugf("Skipping due to query '%s' not in our domain '%s'", state.QName(), m.Domain)
+	if !strings.HasSuffix(state.QName(), "local.") {
+		log.Debugf("Skipping due to query '%s' not '.local'", state.QName())
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
@@ -115,12 +108,7 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("A Instance: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				// Hacky - coerce .local to our domain
-				// I was having trouble using domains other than .local. Need further investigation.
-				// After further investigation, maybe this is working as intended:
-				// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
-				hostCustomDomain := m.ReplaceLocal(localEntry.HostName)
-				mdnsHosts[hostCustomDomain] = entry
+				mdnsHosts[localEntry.HostName] = entry
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
 					localEntry.Instance, m.filter)
@@ -135,9 +123,7 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				localEntry.HostName = m.ReplaceLocal(localEntry.HostName)
-				srvName := localEntry.Service + "." + m.Domain + "."
-				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
+				srvHosts[localEntry.HostName] = append(srvHosts[localEntry.HostName], &localEntry)
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
 					localEntry.Instance, m.filter)
@@ -146,7 +132,7 @@ func (m *MDNS) BrowseMDNS() {
 	}(srvEntriesCh)
 
 	queryService("_workstation._tcp", entriesCh)
-	queryService("_etcd-server-ssl._tcp", srvEntriesCh)
+	//queryService("_etcd-server-ssl._tcp", srvEntriesCh)
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
