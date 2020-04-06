@@ -71,17 +71,18 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	}
 
 	msg.Answer = []dns.RR{}
+	hostName := strings.ToLower(state.QName)
 
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	if m.AddARecord(msg, &state, mdnsHosts, state.Name()) {
+	if m.AddARecord(msg, &state, mdnsHosts, hostName) {
 		log.Debug(msg)
 		w.WriteMsg(msg)
 		return dns.RcodeSuccess, nil
 	}
 
-	srvEntry, present := srvHosts[state.Name()]
+	srvEntry, present := srvHosts[hostName]
 	if present {
 		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 0}
 		for _, host := range srvEntry {
@@ -107,7 +108,8 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("A Instance: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				mdnsHosts[localEntry.HostName] = entry
+				hostName := strings.ToLower(localEntry.HostName)
+				mdnsHosts[hostName] = entry
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
 					localEntry.Instance, m.filter)
@@ -122,7 +124,8 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				srvHosts[localEntry.HostName] = append(srvHosts[localEntry.HostName], &localEntry)
+				hostName := strings.ToLower(localEntry.HostName)
+				srvHosts[hostName] = append(srvHosts[hostName], &localEntry)
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
 					localEntry.Instance, m.filter)
