@@ -1,4 +1,4 @@
-module github.com/openshift/coredns-mdns
+module github.com/pvizeli/coredns-mdns
 
 go 1.14
 
