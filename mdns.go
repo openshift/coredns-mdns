@@ -21,7 +21,6 @@ var log = clog.NewWithPlugin("mdns")
 
 type MDNS struct {
 	Next      plugin.Handler
-	filter    string
 	mutex     *sync.RWMutex
 	mdnsHosts *map[string]*zeroconf.ServiceEntry
 }
@@ -86,26 +85,37 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 
 func (m *MDNS) BrowseMDNS() {
 	entriesCh := make(chan *zeroconf.ServiceEntry)
+	entriesSrv := make(chan *zeroconf.ServiceEntry)
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
+	mdnsServices := []string{}
+
+	// Retrieve Services
+	go func(results <-chan *zeroconf.ServiceEntry) {
+		log.Debug("Retrieving mDNS services")
+		for entry := range results {
+			log.Debugf("Service: %s\n", entry.Instance)
+			mdnsServices = append(mdnsServices, entry.Instance)
+		}
+	}(entriesSrv)
+
+	// Retrieve Hosts
 	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range results {
 			// Make a copy of the entry so zeroconf can't later overwrite our changes
 			localEntry := *entry
-			log.Debugf("A Instance: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
-			if strings.Contains(localEntry.Instance, m.filter) {
-				hostName := strings.ToLower(localEntry.HostName)
-				mdnsHosts[hostName] = entry
-			} else {
-				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-					localEntry.Instance, m.filter)
-			}
+			log.Debugf("Instance: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
+			mdnsHosts[strings.ToLower(localEntry.HostName)] = entry
 		}
 	}(entriesCh)
 
-
 	// Run mdsn query and cache
-	queryService("_services._dns-sd._udp", entriesCh)
+	queryService("_services._dns-sd._udp", entriesSrv)
+
+	// Discover hosts
+	for _, k := range mdnsServices {
+		queryService(k, entriesCh)
+	}
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()

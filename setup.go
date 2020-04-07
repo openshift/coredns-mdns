@@ -20,20 +20,12 @@ func init() {
 
 func setup(c *caddy.Controller) error {
 	c.Next()
-	// Note that a filter of "" will match everything
-	filter := ""
-	if c.NextArg() {
-		filter = c.Val()
-	}
-	if c.NextArg() {
-		return plugin.Error("mdns", c.ArgErr())
-	}
 
 	// Because the plugin interface uses a value receiver, we need to make these
 	// pointers so all copies of the plugin point at the same maps.
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
 	mutex := sync.RWMutex{}
-	m := MDNS{filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts}
+	m := MDNS{mutex: &mutex, mdnsHosts: &mdnsHosts}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
@@ -51,8 +43,6 @@ func setup(c *caddy.Controller) error {
 func browseLoop(m *MDNS) {
 	for {
 		m.BrowseMDNS()
-		// 5 seconds seems to be the minimum ttl that the cache plugin will allow
-		// Since each browse operation takes around 2 seconds, this should be fine
-		time.Sleep(10 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }

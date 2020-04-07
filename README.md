@@ -28,13 +28,3 @@ Specify the domain for the records.
 	mdns
 }
 ~~~
-
-And test with `dig`:
-
-~~~ txt
-dig @localhost baremetal-test-extra-1.example.com
-
-;; ANSWER SECTION:
-baremetal-test-extra-1.example.com. 60 IN A   12.0.0.24
-baremetal-test-extra-1.example.com. 60 IN AAAA fe80::f816:3eff:fe49:19b3
-~~~

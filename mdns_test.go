@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/grandcat/zeroconf"
 	"github.com/coredns/coredns/request"
+	"github.com/grandcat/zeroconf"
 	"github.com/miekg/dns"
 )
 
@@ -47,7 +47,7 @@ func TestAddARecord(t *testing.T) {
 	for _, tc := range testCases {
 		hosts := tc.hosts
 		mutex := sync.RWMutex{}
-		m := MDNS{nil, "", &mutex, &hosts}
+		m := MDNS{nil, &mutex, &hosts}
 		msg := new(dns.Msg)
 		reply := new(dns.Msg)
 		msg.SetReply(reply)
