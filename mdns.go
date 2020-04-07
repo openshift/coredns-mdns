@@ -57,7 +57,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	log.Debugf("Looking for name: %s", state.QName())
 	// Just for convenience so we don't have to keep dereferencing these
 	mdnsHosts := *m.mdnsHosts
-	srvHosts := *m.srvHosts
+	hostName := strings.ToLower(state.QName())
 
 	if !strings.HasSuffix(state.QName(), "local.") {
 		log.Debugf("Skipping due to query '%s' not '.local'", state.QName())
@@ -70,7 +70,6 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	}
 
 	msg.Answer = []dns.RR{}
-	hostName := strings.ToLower(state.QName())
 
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
