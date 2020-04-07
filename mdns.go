@@ -24,7 +24,6 @@ type MDNS struct {
 	filter    string
 	mutex     *sync.RWMutex
 	mdnsHosts *map[string]*zeroconf.ServiceEntry
-	srvHosts  *map[string][]*zeroconf.ServiceEntry
 }
 
 func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*zeroconf.ServiceEntry, name string) bool {
@@ -58,20 +57,19 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	log.Debugf("Looking for name: %s", state.QName())
 	// Just for convenience so we don't have to keep dereferencing these
 	mdnsHosts := *m.mdnsHosts
-	srvHosts := *m.srvHosts
+	hostName := strings.ToLower(state.QName())
 
 	if !strings.HasSuffix(state.QName(), "local.") {
 		log.Debugf("Skipping due to query '%s' not '.local'", state.QName())
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
-	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV {
+	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA {
 		log.Debugf("Skipping due to unrecognized query type %v", state.QType())
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
 	msg.Answer = []dns.RR{}
-	hostName := strings.ToLower(state.QName())
 
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -82,25 +80,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return dns.RcodeSuccess, nil
 	}
 
-	srvEntry, present := srvHosts[hostName]
-	if present {
-		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 0}
-		for _, host := range srvEntry {
-			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.HostName, Priority: 0, Weight: 10, Port: uint16(host.Port)})
-		}
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
-	}
 	log.Debugf("No records found for '%s', forwarding to next plugin.", state.QName())
 	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 }
 
 func (m *MDNS) BrowseMDNS() {
 	entriesCh := make(chan *zeroconf.ServiceEntry)
-	srvEntriesCh := make(chan *zeroconf.ServiceEntry)
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
-	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range results {
@@ -117,24 +103,9 @@ func (m *MDNS) BrowseMDNS() {
 		}
 	}(entriesCh)
 
-	go func(results <-chan *zeroconf.ServiceEntry) {
-		log.Debug("Retrieving SRV mDNS entries")
-		for entry := range results {
-			// Make a copy of the entry so mdns can't later overwrite our changes
-			localEntry := *entry
-			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
-			if strings.Contains(localEntry.Instance, m.filter) {
-				hostName := strings.ToLower(localEntry.HostName)
-				srvHosts[hostName] = append(srvHosts[hostName], &localEntry)
-			} else {
-				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-					localEntry.Instance, m.filter)
-			}
-		}
-	}(srvEntriesCh)
 
-	queryService("_workstation._tcp", entriesCh)
-	//queryService("_etcd-server-ssl._tcp", srvEntriesCh)
+	// Run mdsn query and cache
+	queryService("_services._dns-sd._udp", entriesCh)
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -142,28 +113,14 @@ func (m *MDNS) BrowseMDNS() {
 	for k := range *m.mdnsHosts {
 		delete(*m.mdnsHosts, k)
 	}
-	for k := range *m.srvHosts {
-		delete(*m.srvHosts, k)
-	}
 	// Copy values into the shared maps only after we've collected all of them.
 	// This prevents us from having to lock during the entire mdns browse time.
 	for k, v := range mdnsHosts {
 		(*m.mdnsHosts)[k] = v
 	}
-	for k, v := range srvHosts {
-		// Don't return any SRV records until we have enough of them. Returning
-		// partial SRV lists can result in bad clustering.
-		(*m.srvHosts)[k] = v
-	}
 	log.Debugf("mdnsHosts: %v", m.mdnsHosts)
 	for name, entry := range *m.mdnsHosts {
 		log.Debugf("%s: %v", name, entry)
-	}
-	log.Debugf("srvHosts: %v", m.srvHosts)
-	for name, records := range *m.srvHosts {
-		for _, v := range records {
-			log.Debugf("%s: %v", name, v)
-		}
 	}
 }
 
