@@ -32,9 +32,8 @@ func setup(c *caddy.Controller) error {
 	// Because the plugin interface uses a value receiver, we need to make these
 	// pointers so all copies of the plugin point at the same maps.
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
-	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 	mutex := sync.RWMutex{}
-	m := MDNS{filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts}
+	m := MDNS{filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
