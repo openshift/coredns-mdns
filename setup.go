@@ -20,20 +20,12 @@ func init() {
 
 func setup(c *caddy.Controller) error {
 	c.Next()
-	// Note that a filter of "" will match everything
-	filter := ""
-	if c.NextArg() {
-		filter = c.Val()
-	}
-	if c.NextArg() {
-		return plugin.Error("mdns", c.ArgErr())
-	}
 
 	// Because the plugin interface uses a value receiver, we need to make these
 	// pointers so all copies of the plugin point at the same maps.
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
 	mutex := sync.RWMutex{}
-	m := MDNS{filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts}
+	m := MDNS{mutex: &mutex, mdnsHosts: &mdnsHosts}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
