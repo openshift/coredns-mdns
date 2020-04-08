@@ -84,19 +84,20 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 }
 
 func (m *MDNS) BrowseMDNS() {
-	entriesCh := make(chan *zeroconf.ServiceEntry)
+	entriesHost := make(chan *zeroconf.ServiceEntry)
 	entriesSrv := make(chan *zeroconf.ServiceEntry)
+	servicesCh := make(chan string)
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
-	mdnsServices := []string{}
 
 	// Retrieve Services
 	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving mDNS services")
 		for entry := range results {
 			log.Debugf("Service: %s\n", entry.Instance)
-			mdnsServices = append(mdnsServices, entry.Instance)
+			servicesCh <- entry.Instance
 		}
-	}(entriesSrv)
+		close(servicesCh)
+	}(entriesHost)
 
 	// Retrieve Hosts
 	go func(results <-chan *zeroconf.ServiceEntry) {
@@ -113,8 +114,8 @@ func (m *MDNS) BrowseMDNS() {
 	queryService("_services._dns-sd._udp", entriesSrv)
 
 	// Discover hosts
-	for _, k := range mdnsServices {
-		queryService(k, entriesCh)
+	for srvEntry := range servicesCh {
+		queryService(srvEntry, entriesHost)
 	}
 
 	m.mutex.Lock()
