@@ -1,6 +1,8 @@
 package mdns
 
 import (
+	"context"
+	"errors"
 	"net"
 	"sync"
 	"testing"
@@ -50,7 +52,7 @@ func TestAddARecord(t *testing.T) {
 		srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 		cnames := make(map[string]string)
 		mutex := sync.RWMutex{}
-		m := MDNS{nil, tc.domain, 0, "", &mutex, &hosts, &srvHosts, &cnames}
+		m := MDNS{nil, tc.domain, 0, "", "", &mutex, &hosts, &srvHosts, &cnames}
 		msg := new(dns.Msg)
 		reply := new(dns.Msg)
 		msg.SetReply(reply)
@@ -96,4 +98,59 @@ func (nilResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (nilResponseWriter) TsigTimersOnly(b bool) {
+}
+
+func TestQueryService(t *testing.T) {
+	testCases := []struct {
+		tcase         string
+		expectedError string
+		zeroconfImpl  ZeroconfInterface
+	}{
+		{"queryService succeeds", "", fakeZeroconf{}},
+		{"NewResolver fails", "test resolver error", failZeroconf{}},
+		{"Browse fails", "test browse error", browseFailZeroconf{}},
+	}
+	for _, tc := range testCases {
+		entriesCh := make(chan *zeroconf.ServiceEntry)
+		result := queryService("test", entriesCh, net.Interface{}, tc.zeroconfImpl)
+		if tc.expectedError == "" {
+			if result != nil {
+				t.Errorf("Unexpected failure in %v: %v", tc.tcase, result)
+			}
+		} else {
+			if result.Error() != tc.expectedError {
+				t.Errorf("Unexpected result in %v: %v", tc.tcase, result)
+			}
+		}
+	}
+}
+
+type fakeZeroconf struct{}
+
+func (fakeZeroconf) NewResolver(opts ...zeroconf.ClientOption) (ResolverInterface, error) {
+	return fakeResolver{}, nil
+}
+
+type failZeroconf struct{}
+
+func (failZeroconf) NewResolver(opts ...zeroconf.ClientOption) (ResolverInterface, error) {
+	return nil, errors.New("test resolver error")
+}
+
+type fakeResolver struct{}
+
+func (fakeResolver) Browse(context context.Context, service, domain string, entries chan<- *zeroconf.ServiceEntry) error {
+	return nil
+}
+
+type browseFailZeroconf struct{}
+
+func (browseFailZeroconf) NewResolver(opts ...zeroconf.ClientOption) (ResolverInterface, error) {
+	return failResolver{}, nil
+}
+
+type failResolver struct{}
+
+func (failResolver) Browse(context context.Context, service, domain string, entries chan<- *zeroconf.ServiceEntry) error {
+	return errors.New("test browse error")
 }
