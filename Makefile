@@ -12,7 +12,7 @@ vet: ## Run go vet against code
 
 .PHONY: test
 test: ## Run go test against code
-	GO111MODULE=on go test $(GO_TEST_FLAGS) ./
+	GO111MODULE=on go test -v $(GO_TEST_FLAGS) ./
 
 .PHONY: build-coredns
 build-coredns: ## Build coredns using the local branch of coredns-mdns
