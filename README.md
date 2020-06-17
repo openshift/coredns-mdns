@@ -13,7 +13,7 @@ accessible through a standard DNS server.
 ## Syntax
 
 ~~~
-mdns example.com [minimum SRV records] [filter text]
+mdns example.com [minimum SRV records] [filter text] [bind address]
 ~~~
 
 ## Examples
@@ -69,3 +69,19 @@ example.com {
 
 This configuration would ignore any mDNS records that do not contain the
 string "my-id" in their service name.
+
+If `bind address` is specified in the configuration, the plugin will only send
+mDNS traffic to the associated interface. This prevents sending multicast
+packets on interfaces where that may not be desirable. To use `bind address`
+without setting a filter, set `filter text` to "".
+
+~~~ corefile
+example.com {
+    mdns example.com 3 "" 192.168.1.1
+}
+~~~
+
+This configuration will only send multicast packets to the interface assigned
+the `192.168.1.1` address. The interface lookup is dynamic each time an mDNS
+query is sent, so if the address moves to a different interface the plugin
+will automatically switch to the new one.

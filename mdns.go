@@ -3,6 +3,7 @@ package mdns
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -14,20 +15,22 @@ import (
 
 	"github.com/celebdor/zeroconf"
 	"github.com/miekg/dns"
+	"github.com/openshift/mdns-publisher/pkg/publisher"
 	"golang.org/x/net/context"
 )
 
 var log = clog.NewWithPlugin("mdns")
 
 type MDNS struct {
-	Next      plugin.Handler
-	Domain    string
-	minSRV    int
-	filter    string
-	mutex     *sync.RWMutex
-	mdnsHosts *map[string]*zeroconf.ServiceEntry
-	srvHosts  *map[string][]*zeroconf.ServiceEntry
-	cnames    *map[string]string
+	Next        plugin.Handler
+	Domain      string
+	minSRV      int
+	filter      string
+	bindAddress string
+	mutex       *sync.RWMutex
+	mdnsHosts   *map[string]*zeroconf.ServiceEntry
+	srvHosts    *map[string][]*zeroconf.ServiceEntry
+	cnames      *map[string]string
 }
 
 func (m MDNS) ReplaceLocal(input string) string {
@@ -165,8 +168,17 @@ func (m *MDNS) BrowseMDNS() {
 		}
 	}(srvEntriesCh)
 
-	queryService("_workstation._tcp", entriesCh)
-	queryService("_etcd-server-ssl._tcp", srvEntriesCh)
+	var iface net.Interface
+	if m.bindAddress != "" {
+		foundIface, err := publisher.FindIface(net.ParseIP(m.bindAddress))
+		if err != nil {
+			log.Errorf("Failed to find interface for '%s'\n", m.bindAddress)
+		} else {
+			iface = foundIface
+		}
+	}
+	_ = queryService("_workstation._tcp", entriesCh, iface, ZeroconfImpl{})
+	_ = queryService("_etcd-server-ssl._tcp", srvEntriesCh, iface, ZeroconfImpl{})
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -208,20 +220,25 @@ func (m *MDNS) BrowseMDNS() {
 	log.Debugf("cnames: %v", m.cnames)
 }
 
-func queryService(service string, channel chan *zeroconf.ServiceEntry) {
-	resolver, err := zeroconf.NewResolver(nil)
+func queryService(service string, channel chan *zeroconf.ServiceEntry, iface net.Interface, z ZeroconfInterface) error {
+	var opts zeroconf.ClientOption
+	if iface.Name != "" {
+		opts = zeroconf.SelectIfaces([]net.Interface{iface})
+	}
+	resolver, err := z.NewResolver(opts)
 	if err != nil {
 		log.Errorf("Failed to initialize %s resolver: %s", service, err.Error())
-		return
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = resolver.Browse(ctx, service, "local.", channel)
 	if err != nil {
 		log.Errorf("Failed to browse %s records: %s", service, err.Error())
-		return
+		return err
 	}
 	<-ctx.Done()
+	return nil
 }
 
 func (m MDNS) Name() string { return "mdns" }
@@ -240,5 +257,19 @@ func (r *ResponsePrinter) WriteMsg(res *dns.Msg) error {
 }
 
 var out io.Writer = os.Stdout
+
+type ZeroconfInterface interface {
+	NewResolver(...zeroconf.ClientOption) (ResolverInterface, error)
+}
+
+type ZeroconfImpl struct{}
+
+func (z ZeroconfImpl) NewResolver(opts ...zeroconf.ClientOption) (ResolverInterface, error) {
+	return zeroconf.NewResolver(opts...)
+}
+
+type ResolverInterface interface {
+	Browse(context.Context, string, string, chan<- *zeroconf.ServiceEntry) error
+}
 
 const m = "mdns"
