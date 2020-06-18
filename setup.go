@@ -29,6 +29,7 @@ func setup(c *caddy.Controller) error {
 	minSRV := 3
 	// Note that a filter of "" will match everything
 	filter := ""
+	bindAddress := ""
 	if c.NextArg() {
 		val, err := strconv.Atoi(c.Val())
 		if err != nil {
@@ -41,6 +42,9 @@ func setup(c *caddy.Controller) error {
 		filter = c.Val()
 	}
 	if c.NextArg() {
+		bindAddress = c.Val()
+	}
+	if c.NextArg() {
 		return plugin.Error("mdns", c.ArgErr())
 	}
 
@@ -50,7 +54,7 @@ func setup(c *caddy.Controller) error {
 	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
 	cnames := make(map[string]string)
 	mutex := sync.RWMutex{}
-	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
+	m := MDNS{Domain: strings.TrimSuffix(domain, "."), minSRV: minSRV, filter: filter, bindAddress: bindAddress, mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
 
 	c.OnStartup(func() error {
 		go browseLoop(&m)
