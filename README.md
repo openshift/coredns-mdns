@@ -85,3 +85,17 @@ This configuration will only send multicast packets to the interface assigned
 the `192.168.1.1` address. The interface lookup is dynamic each time an mDNS
 query is sent, so if the address moves to a different interface the plugin
 will automatically switch to the new one.
+
+## Service Discovery
+
+Queries to mDNS are constrained to the `.local` TLD, alternative domains that an mDNS server publishes are not supported by this plugin.
+
+If a query is not responding, check the log for hosts discovered by this plugin reported as `mdnsHosts`. The plugin will populate `mdnsHosts` by **only discovering** mDNS services of the type `_workstation._tcp`.
+
+### Publishing `_workstation._tcp` service with Avahi
+
+Avahi is commonly installed on Linux systems as the default mDNS server. Your distro may have it configured to publish this service by default, however distros that follow upstream have this feature disabled for security reasons. While it is not required to be enabled to respond to explicit requests, it is required for service discovery over mDNS which this plugin relies on.
+
+You can publish the workstation service by enabling `publish-workstation=yes` under `[publish]` within your Avahi config (`/etc/avahi/avahi-daemon.conf`). To check that it's discovered, use `avahi-browse --all --resolve --terminate`.
+
+You can alternatively publish a service to an existing hostname (eg configured in `/etc/avahi/hosts` or `avahi-publish --address <hostname> <ip>`) with `avahi-publish --service friendly_name _workstation._tcp 42 --domain=local --host=your-hostname.local`, `--domain` allows for publishing to a different domain(group, defaults to `local`), while `--host` is the FQDN including the `.local` (this can differ from `.local`, as the plugin discovery is actually based on the `local` domain, however the plugin does not properly handle the FQDN), the port number has no relevance to this plugins functionality but is required by `avahi-publish --service`.
