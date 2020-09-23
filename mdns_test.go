@@ -154,3 +154,28 @@ type failResolver struct{}
 func (failResolver) Browse(context context.Context, service, domain string, entries chan<- *zeroconf.ServiceEntry) error {
 	return errors.New("test browse error")
 }
+
+func TestReplaceDomain(t *testing.T) {
+	testCases := []struct {
+		tcase    string
+		input    string
+		expected string
+	}{
+		{".local", "foo.local.", "foo.testdomain."},
+		{".bar", "foo.bar.", "foo.testdomain."},
+		{".foobar", "foo.foobar.", "foo.testdomain."},
+		{".bar.baz", "foo.bar.baz.", "foo.testdomain."},
+	}
+
+	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
+	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
+	cnames := make(map[string]string)
+	mutex := sync.RWMutex{}
+	m := MDNS{Domain: "testdomain", minSRV: 0, filter: "", bindAddress: "", mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
+	for _, tc := range testCases {
+		result := m.ReplaceDomain(tc.input)
+		if result != tc.expected {
+			t.Errorf("Incorrect domain replacement in %s: '%s' != '%s'", tc.tcase, tc.expected, result)
+		}
+	}
+}
