@@ -122,6 +122,7 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return dns.RcodeSuccess, nil
 	}
 	log.Debugf("No records found for '%s', forwarding to next plugin.", state.QName())
+	log.Debug("foo")
 	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 }
 
