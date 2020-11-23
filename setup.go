@@ -72,8 +72,6 @@ func setup(c *caddy.Controller) error {
 func browseLoop(m *MDNS) {
 	for {
 		m.BrowseMDNS()
-		// 5 seconds seems to be the minimum ttl that the cache plugin will allow
-		// Since each browse operation takes around 2 seconds, this should be fine
-		time.Sleep(5 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
