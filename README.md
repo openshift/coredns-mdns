@@ -45,15 +45,10 @@ If `minimum SRV records` is specified in the configuration, the plugin will wait
 until it has at least that many SRV records before responding with any of them.
 `minimum SRV records` defaults to `3`.
 
-~~~ corefile
-example.com {
-    mdns example.com 2
-}
-~~~
-
-This would mean that at least two SRV records of a given type would need to be
-present for any SRV records to be returned. If only one record is found, any
-requests for that type of SRV record would receive no results.
+NOTE: Support for SRV records has been removed, so the `minimum SRV records`
+option is now ignored. The parameter is left for backward compatibility with
+existing configurations, but its value will have no effect on the behavior
+of the plugin.
 
 If `filter text` is specified in the configuration, the plugin will ignore any
 mDNS records that do not include the specified text in the service name. This
