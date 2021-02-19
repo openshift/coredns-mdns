@@ -16,6 +16,8 @@ set -ex -o pipefail
 CONTAINER_IMAGE=${CONTAINER_IMAGE:-}
 
 export GOPATH="${1:-$(mktemp -d)}"
+# Must be an absolute path
+GOPATH=$(readlink -f "$GOPATH")
 if [ -z "${1:-}" ]
 then
     trap "chmod -R u+w $GOPATH; rm -rf $GOPATH" EXIT
