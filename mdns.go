@@ -33,10 +33,13 @@ type MDNS struct {
 	cnames      *map[string]string
 }
 
-func (m MDNS) ReplaceLocal(input string) string {
-	// Replace .local domain with our configured custom domain
+func (m MDNS) ReplaceDomain(input string) string {
+	// Replace input domain with our configured custom domain
 	fqDomain := "." + strings.TrimSuffix(m.Domain, ".") + "."
-	return input[0:len(input)-7] + fqDomain
+	domainParts := strings.SplitN(input, ".", 2)
+	// +1 so we strip the leading . as well
+	suffixLen := len(domainParts[1]) + 1
+	return input[0:len(input)-suffixLen] + fqDomain
 }
 
 func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]*zeroconf.ServiceEntry, name string) bool {
@@ -142,7 +145,7 @@ func (m *MDNS) BrowseMDNS() {
 				// I was having trouble using domains other than .local. Need further investigation.
 				// After further investigation, maybe this is working as intended:
 				// https://lists.freedesktop.org/archives/avahi/2006-February/000517.html
-				hostCustomDomain := m.ReplaceLocal(localEntry.HostName)
+				hostCustomDomain := m.ReplaceDomain(localEntry.HostName)
 				mdnsHosts[hostCustomDomain] = entry
 			} else {
 				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
@@ -158,7 +161,7 @@ func (m *MDNS) BrowseMDNS() {
 			localEntry := *entry
 			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
 			if strings.Contains(localEntry.Instance, m.filter) {
-				localEntry.HostName = m.ReplaceLocal(localEntry.HostName)
+				localEntry.HostName = m.ReplaceDomain(localEntry.HostName)
 				srvName := localEntry.Service + "." + m.Domain + "."
 				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
 			} else {
