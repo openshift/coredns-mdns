@@ -49,10 +49,8 @@ func TestAddARecord(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		hosts := tc.hosts
-		srvHosts := make(map[string][]*zeroconf.ServiceEntry)
-		cnames := make(map[string]string)
 		mutex := sync.RWMutex{}
-		m := MDNS{nil, tc.domain, 0, "", "", &mutex, &hosts, &srvHosts, &cnames}
+		m := MDNS{nil, tc.domain, "", "", &mutex, &hosts}
 		msg := new(dns.Msg)
 		reply := new(dns.Msg)
 		msg.SetReply(reply)
@@ -168,10 +166,8 @@ func TestReplaceDomain(t *testing.T) {
 	}
 
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
-	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
-	cnames := make(map[string]string)
 	mutex := sync.RWMutex{}
-	m := MDNS{Domain: "testdomain", minSRV: 0, filter: "", bindAddress: "", mutex: &mutex, mdnsHosts: &mdnsHosts, srvHosts: &srvHosts, cnames: &cnames}
+	m := MDNS{Domain: "testdomain", filter: "", bindAddress: "", mutex: &mutex, mdnsHosts: &mdnsHosts}
 	for _, tc := range testCases {
 		result := m.ReplaceDomain(tc.input)
 		if result != tc.expected {

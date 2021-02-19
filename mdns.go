@@ -24,13 +24,10 @@ var log = clog.NewWithPlugin("mdns")
 type MDNS struct {
 	Next        plugin.Handler
 	Domain      string
-	minSRV      int
 	filter      string
 	bindAddress string
 	mutex       *sync.RWMutex
 	mdnsHosts   *map[string]*zeroconf.ServiceEntry
-	srvHosts    *map[string][]*zeroconf.ServiceEntry
-	cnames      *map[string]string
 }
 
 func (m MDNS) ReplaceDomain(input string) string {
@@ -62,13 +59,6 @@ func (m MDNS) AddARecord(msg *dns.Msg, state *request.Request, hosts map[string]
 	return false
 }
 
-// Return the node index from a hostname.
-// For example, the return value from "master-0.ostest.test.metal3.io" would be "0"
-func GetIndex(host string) string {
-	shortname := strings.Split(host, ".")[0]
-	return shortname[strings.LastIndex(shortname, "-")+1:]
-}
-
 func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 
 	log.Debug("Received query")
@@ -78,17 +68,15 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 	msg.RecursionAvailable = true
 	state := request.Request{W: w, Req: r}
 	log.Debugf("Looking for name: %s", state.QName())
-	// Just for convenience so we don't have to keep dereferencing these
+	// Just for convenience so we don't have to keep dereferencing this
 	mdnsHosts := *m.mdnsHosts
-	srvHosts := *m.srvHosts
-	cnames := *m.cnames
 
 	if !strings.HasSuffix(state.QName(), m.Domain+".") {
 		log.Debugf("Skipping due to query '%s' not in our domain '%s'", state.QName(), m.Domain)
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
 
-	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA && state.QType() != dns.TypeSRV && state.QType() != dns.TypeCNAME {
+	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA {
 		log.Debugf("Skipping due to unrecognized query type %v", state.QType())
 		return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 	}
@@ -104,36 +92,13 @@ func (m MDNS) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (i
 		return dns.RcodeSuccess, nil
 	}
 
-	cnameTarget, present := cnames[state.Name()]
-	if present {
-		cnameheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 0}
-		msg.Answer = append(msg.Answer, &dns.CNAME{Hdr: cnameheader, Target: cnameTarget})
-		m.AddARecord(msg, &state, mdnsHosts, cnameTarget)
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
-	}
-
-	srvEntry, present := srvHosts[state.Name()]
-	if present {
-		srvheader := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeSRV, Class: dns.ClassINET, Ttl: 0}
-		for _, host := range srvEntry {
-			msg.Answer = append(msg.Answer, &dns.SRV{Hdr: srvheader, Target: host.HostName, Priority: 0, Weight: 10, Port: uint16(host.Port)})
-		}
-		log.Debug(msg)
-		w.WriteMsg(msg)
-		return dns.RcodeSuccess, nil
-	}
 	log.Debugf("No records found for '%s', forwarding to next plugin.", state.QName())
 	return plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
 }
 
 func (m *MDNS) BrowseMDNS() {
 	entriesCh := make(chan *zeroconf.ServiceEntry)
-	srvEntriesCh := make(chan *zeroconf.ServiceEntry)
 	mdnsHosts := make(map[string]*zeroconf.ServiceEntry)
-	srvHosts := make(map[string][]*zeroconf.ServiceEntry)
-	cnames := make(map[string]string)
 	go func(results <-chan *zeroconf.ServiceEntry) {
 		log.Debug("Retrieving mDNS entries")
 		for entry := range results {
@@ -154,23 +119,6 @@ func (m *MDNS) BrowseMDNS() {
 		}
 	}(entriesCh)
 
-	go func(results <-chan *zeroconf.ServiceEntry) {
-		log.Debug("Retrieving SRV mDNS entries")
-		for entry := range results {
-			// Make a copy of the entry so mdns can't later overwrite our changes
-			localEntry := *entry
-			log.Debugf("SRV Instance: %s, Service: %s, Domain: %s, HostName: %s, AddrIPv4: %s, AddrIPv6: %s\n", localEntry.Instance, localEntry.Service, localEntry.Domain, localEntry.HostName, localEntry.AddrIPv4, localEntry.AddrIPv6)
-			if strings.Contains(localEntry.Instance, m.filter) {
-				localEntry.HostName = m.ReplaceDomain(localEntry.HostName)
-				srvName := localEntry.Service + "." + m.Domain + "."
-				srvHosts[srvName] = append(srvHosts[srvName], &localEntry)
-			} else {
-				log.Debugf("Ignoring entry '%s' because it doesn't match filter '%s'\n",
-					localEntry.Instance, m.filter)
-			}
-		}
-	}(srvEntriesCh)
-
 	var iface net.Interface
 	if m.bindAddress != "" {
 		foundIface, err := publisher.FindIface(net.ParseIP(m.bindAddress))
@@ -181,46 +129,22 @@ func (m *MDNS) BrowseMDNS() {
 		}
 	}
 	_ = queryService("_workstation._tcp", entriesCh, iface, ZeroconfImpl{})
-	_ = queryService("_etcd-server-ssl._tcp", srvEntriesCh, iface, ZeroconfImpl{})
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	// Clear maps so we don't have stale entries
+	// Clear map so we don't have stale entries
 	for k := range *m.mdnsHosts {
 		delete(*m.mdnsHosts, k)
 	}
-	for k := range *m.srvHosts {
-		delete(*m.srvHosts, k)
-	}
-	for k := range *m.cnames {
-		delete(*m.cnames, k)
-	}
-	// Copy values into the shared maps only after we've collected all of them.
+	// Copy values into the shared map only after we've collected all of them.
 	// This prevents us from having to lock during the entire mdns browse time.
 	for k, v := range mdnsHosts {
 		(*m.mdnsHosts)[k] = v
-	}
-	for k, v := range srvHosts {
-		// Don't return any SRV records until we have enough of them. Returning
-		// partial SRV lists can result in bad clustering.
-		if len(v) >= m.minSRV {
-			(*m.srvHosts)[k] = v
-		}
-	}
-	for k, v := range cnames {
-		(*m.cnames)[k] = v
 	}
 	log.Infof("mdnsHosts: %v", m.mdnsHosts)
 	for name, entry := range *m.mdnsHosts {
 		log.Debugf("%s: %v", name, entry)
 	}
-	log.Debugf("srvHosts: %v", m.srvHosts)
-	for name, records := range *m.srvHosts {
-		for _, v := range records {
-			log.Debugf("%s: %v", name, v)
-		}
-	}
-	log.Debugf("cnames: %v", m.cnames)
 }
 
 func queryService(service string, channel chan *zeroconf.ServiceEntry, iface net.Interface, z ZeroconfInterface) error {

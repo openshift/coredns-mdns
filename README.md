@@ -41,19 +41,15 @@ baremetal-test-extra-1.example.com. 60 IN A   12.0.0.24
 baremetal-test-extra-1.example.com. 60 IN AAAA fe80::f816:3eff:fe49:19b3
 ~~~
 
-If `minimum SRV records` is specified in the configuration, the plugin will wait
-until it has at least that many SRV records before responding with any of them.
-`minimum SRV records` defaults to `3`.
+The `minimum SRV records` parameter was only used by a removed feature. It
+has no effect, but for backward compatibility it must be present to use any
+subsequent parameters.
 
 ~~~ corefile
 example.com {
-    mdns example.com 2
+    mdns example.com 0
 }
 ~~~
-
-This would mean that at least two SRV records of a given type would need to be
-present for any SRV records to be returned. If only one record is found, any
-requests for that type of SRV record would receive no results.
 
 If `filter text` is specified in the configuration, the plugin will ignore any
 mDNS records that do not include the specified text in the service name. This
@@ -63,7 +59,7 @@ set, all records will be processed.
 
 ~~~ corefile
 example.com {
-    mdns example.com 3 my-id
+    mdns example.com 0 my-id
 }
 ~~~
 
@@ -77,7 +73,7 @@ without setting a filter, set `filter text` to "".
 
 ~~~ corefile
 example.com {
-    mdns example.com 3 "" 192.168.1.1
+    mdns example.com 0 "" 192.168.1.1
 }
 ~~~
 
