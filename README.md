@@ -85,3 +85,34 @@ This configuration will only send multicast packets to the interface assigned
 the `192.168.1.1` address. The interface lookup is dynamic each time an mDNS
 query is sent, so if the address moves to a different interface the plugin
 will automatically switch to the new one.
+
+## Service Discovery
+
+Queries to mDNS are constrained to the `local` domain, alternative domains that an mDNS server publishes are not supported by this plugin. This does not restrict you to `.local` TLD, as the address is referenced from the service responses belonging to the `local` domain.
+
+If you have multiple network interfaces that respond to mDNS for your host(eg on the same system that CoreDNS is running), this can result in the wrong IP address returned for a hostname due to a race condition with multicast. Make sure you configure your mDNS server to whitelist the network interface with the assigned IP address you want to associate the hostname to.
+
+If a query is not responding, check the log for hosts discovered by this plugin reported as `mdnsHosts`. The plugin will populate `mdnsHosts` by **only discovering** mDNS services of the type `_workstation._tcp`.
+
+### Publishing `_workstation._tcp` service with Avahi
+
+Avahi is commonly installed on Linux systems as the default mDNS server. Your distro may have it configured to publish this service by default, however distros that [follow upstream defaults](https://github.com/lathiat/avahi/blob/d1e71b320d96d0f213ecb0885c8313039a09f693/avahi-daemon/avahi-daemon.conf#L50) have this feature disabled for security reasons. While it is not required to be enabled to respond to explicit requests, it is required for service discovery over mDNS which this plugin relies on.
+
+You can list the results `coredns-mdns` will discover with: `avahi-browse --resolve --terminate _workstation._tcp`
+
+If your hostname is missing but can be resolved with `avahi-resolve --name your-hostname-here.local`, it needs to be published as a workstation service.
+
+Edit `/etc/avahi/avahi-daemon.conf`:
+
+```
+[publish]
+publish-workstation=yes
+```
+
+If the hostname is defined by `avahi-publish --address <hostname> <ip>`, `/etc/avahi/hosts`, or other means like D-Bus, you can publish the workstation service to point to that hostname with: 
+
+`avahi-publish --service friendly_name _workstation._tcp 9`
+
+- The last argument is an associated port for the service, it is not important for this plugin but a value is required to publish.
+- You can use `--host=<hostname>` to choose a value that differs from the default Avahi `host-name` in `/etc/avahi/avahi-daemon.conf`. This should be an FQDN value, the TLD should be appended to it (eg, `--host=your-hostname-here.local`)
+- By default it will be published under the `local` domain which `coredns-mdns` searches.
