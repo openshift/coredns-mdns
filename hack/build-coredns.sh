@@ -28,16 +28,15 @@ export COREDNS_BRANCH="${COREDNS_BRANCH:-master}"
 cd $GOPATH/src/github.com/coredns
 if [ ! -d coredns ]
 then
-    git clone ${COREDNS_REPO}
+    git clone --depth 1 ${COREDNS_REPO}
 fi
 cd coredns
 git checkout ${COREDNS_BRANCH}
 # Make coredns use our local source
-GO111MODULE=on go mod edit -replace github.com/openshift/coredns-mdns=$source_dir
-GO111MODULE=on go mod vendor
+go mod edit -replace github.com/openshift/coredns-mdns=$source_dir
 if [ -z "$CONTAINER_IMAGE" ]
 then
-    GO111MODULE=on GOFLAGS=-mod=vendor go build -o coredns .
+    go build -mod=mod -o coredns .
     cp coredns "$source_dir"
 else
     podman build -t "$CONTAINER_IMAGE" -f Dockerfile.openshift .
