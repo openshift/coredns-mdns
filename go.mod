@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/celebdor/zeroconf v0.0.0-20210412110229-8ba34664402f
-	github.com/coredns/caddy v1.1.1
+	github.com/coredns/caddy v1.1.3
 	github.com/coredns/coredns v1.10.0
 	github.com/miekg/dns v1.1.50
 	github.com/openshift/mdns-publisher v0.0.0-20220222182051-8fef1ccb075f
