@@ -1,6 +1,6 @@
 module github.com/openshift/coredns-mdns/v4
 
-go 1.18
+go 1.24.0
 
 require (
 	github.com/celebdor/zeroconf v0.0.0-20210412110229-8ba34664402f
@@ -8,7 +8,7 @@ require (
 	github.com/coredns/coredns v1.10.0
 	github.com/miekg/dns v1.1.50
 	github.com/openshift/mdns-publisher v0.0.0-20220222182051-8fef1ccb075f
-	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/net v0.46.0
 )
 
 require (
@@ -27,10 +27,11 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/stretchr/testify v1.8.0 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/sys v0.0.0-20220804214406-8e32c043e418 // indirect
-	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/mod v0.28.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/tools v0.37.0 // indirect
 	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f // indirect
 	google.golang.org/grpc v1.49.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
